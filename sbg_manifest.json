@@ -1,0 +1,40 @@
+{
+  "rules": [
+    {
+      "id": "placeholder-comments",
+      "type": "placeholder-comments",
+      "enabled": true,
+      "patterns": [
+        "placeholder",
+        "put your code here",
+        "replace me",
+        "change me",
+        "sample content"
+      ]
+    },
+    {
+      "id": "marker-spam",
+      "type": "marker-spam",
+      "enabled": true,
+      "patterns": ["TODO", "FIXME", "XXX"],
+      "threshold": 3
+    },
+    {
+      "id": "empty-files",
+      "type": "empty-files",
+      "enabled": true
+    },
+    {
+      "id": "long-lines",
+      "type": "long-lines",
+      "enabled": true,
+      "max_length": 120
+    },
+    {
+      "id": "file-size",
+      "type": "file-size",
+      "enabled": true,
+      "max_bytes": 1048576
+    }
+  ]
+}
