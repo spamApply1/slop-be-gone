@@ -383,6 +383,27 @@ How to fix:
 - Remove the debugging statement, or replace it with an intentional, configured
   logging call that belongs in the codebase.
 
+## Ignoring files with .sbgignore
+
+Place a `.sbgignore` file at the repository root to keep whole paths or trees
+out of every scan. Blank lines and lines starting with `#` are ignored; every
+other line is a glob (supporting `*`, `?`, and `**`) matched against a file's
+repo-relative POSIX path.
+
+- A trailing slash ignores a directory subtree: `build/` ignores everything
+  under `build/`.
+- A bare name ignores both a matching file and its subtree: `vendor` ignores a
+  file named `vendor` and everything under `vendor/`.
+- Globs work directly: `**/*.min.js` ignores minified bundles anywhere.
+
+```gitignore
+# .sbgignore
+build/
+dist/
+vendor
+**/*.generated.*
+```
+
 ## Rule severity
 
 Every rule accepts an optional `severity` of `error` (default) or `warning`.

@@ -151,6 +151,13 @@ class RuleEngine:
         repo_root = Path(repo_root).expanduser().resolve()
         violations: list[Violation] = []
         rules = [rule for rule in self.manifest.get("rules", []) if rule.get("enabled", True)]
+        ignore_selectors = self._load_ignore_selectors(repo_root)
+        if ignore_selectors:
+            file_paths = [
+                raw_path
+                for raw_path in file_paths
+                if raw_path is not None and not self._is_ignored(repo_root, raw_path, ignore_selectors)
+            ]
         repo_context = self._build_repo_context(repo_root, file_paths)
 
         for rule in rules:
@@ -362,6 +369,36 @@ class RuleEngine:
         else:
             return []
         return [self._glob_to_regex(glob) for glob in globs if glob.strip()]
+
+    def _load_ignore_selectors(self, repo_root: Path) -> list[re.Pattern[str]]:
+        ignore_file = repo_root / ".sbgignore"
+        try:
+            text = ignore_file.read_text(encoding="utf-8")
+        except (FileNotFoundError, OSError, UnicodeDecodeError):
+            return []
+        selectors: list[re.Pattern[str]] = []
+        for raw_line in text.splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+            trailing_dir = line.endswith("/")
+            base = line.rstrip("/")
+            if not base:
+                continue
+            patterns: list[str] = []
+            if trailing_dir:
+                patterns.append(f"{base}/**")
+            else:
+                patterns.append(base)
+                if "*" not in base and "?" not in base:
+                    patterns.append(f"{base}/**")
+            for pattern in patterns:
+                selectors.append(self._glob_to_regex(pattern))
+        return selectors
+
+    def _is_ignored(self, repo_root: Path, raw_path: str | Path, selectors: list[re.Pattern[str]]) -> bool:
+        relative_path = self._relative_posix(repo_root, raw_path)
+        return any(selector.match(relative_path) for selector in selectors)
 
     def _select_paths(
         self,

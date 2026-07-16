@@ -325,6 +325,32 @@ class RuleEngineTests(unittest.TestCase):
             self.assertIn("(warning)", violations[0].format())
             self.assertEqual(violations[0].as_dict()["severity"], "warning")
 
+    def test_sbgignore_excludes_matching_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = Path(temp_dir)
+            (repo_root / "keep.py").write_text("# placeholder\n", encoding="utf-8")
+            (repo_root / "build").mkdir()
+            (repo_root / "build" / "gen.py").write_text("# placeholder\n", encoding="utf-8")
+            (repo_root / "vendor").mkdir()
+            (repo_root / "vendor" / "lib.py").write_text("# placeholder\n", encoding="utf-8")
+            (repo_root / ".sbgignore").write_text("# ignore generated trees\nbuild/\nvendor\n", encoding="utf-8")
+
+            engine = RuleEngine(
+                {
+                    "rules": [
+                        {
+                            "id": "placeholder-comments",
+                            "type": "placeholder-comments",
+                            "enabled": True,
+                            "patterns": ["placeholder"],
+                        }
+                    ]
+                }
+            )
+            violations = engine.scan_repository(repo_root)
+
+            self.assertEqual({violation.path for violation in violations}, {"keep.py"})
+
 
 if __name__ == "__main__":
     unittest.main()
