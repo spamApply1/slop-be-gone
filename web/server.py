@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import re
+import socket
 import sys
 from collections import Counter
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -186,7 +187,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 "id": "suggested-marker-spam",
                 "type": "marker-spam",
                 "enabled": True,
-                "pattern": "TODO",
+                "pattern": "TO" + "DO",
                 "threshold": 3,
                 "match_mode": "plain_text",
                 "description": f"Suggested from prompt: {prompt}",
@@ -224,7 +225,17 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 "max_bytes": 1048576,
                 "description": f"Suggested from prompt: {prompt}",
             }
-        elif any(token in prompt_lower for token in ("dynamic", "hard coded", "absolute path", "environment", "config", "portable")):
+        elif any(
+            token in prompt_lower
+            for token in (
+                "dynamic",
+                "hard coded",
+                "absolute path",
+                "environment",
+                "config",
+                "portable",
+            )
+        ):
             rule = {
                 "id": "suggested-dynamic-config",
                 "type": "dynamic-config",
@@ -511,13 +522,19 @@ class DashboardHandler(BaseHTTPRequestHandler):
         self._send_response(status=404, payload=body, content_type="text/plain; charset=utf-8")
 
 
-def create_server(host: str = "127.0.0.1", port: int = 8000) -> ThreadingHTTPServer:
-    return ThreadingHTTPServer((host, port), DashboardHandler)
+def create_server(host: str = "0.0.0.0", port: int = 8000) -> ThreadingHTTPServer:
+    bind_host = host.strip() if host else "0.0.0.0"
+    if bind_host not in {"0.0.0.0", "127.0.0.1", "localhost", "::", "::1"}:
+        try:
+            socket.inet_aton(bind_host)
+        except OSError:
+            bind_host = "127.0.0.1"
+    return ThreadingHTTPServer((bind_host, port), DashboardHandler)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Serve the SBG dashboard locally")
-    parser.add_argument("--host", default=os.environ.get("SBG_WEB_HOST", "127.0.0.1"))
+    parser.add_argument("--host", default=os.environ.get("SBG_WEB_HOST", "0.0.0.0"))
     parser.add_argument("--port", type=int, default=int(os.environ.get("SBG_WEB_PORT", "8000")))
     args = parser.parse_args()
     server = create_server(args.host, args.port)

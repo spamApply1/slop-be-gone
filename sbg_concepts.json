@@ -144,7 +144,7 @@
       "pattern_name": "dynamic-config",
       "pattern_text": "",
       "pattern_type": "plain_text",
-      "examples": ["A config value that uses environment variables or runtime discovery instead of /home/… or http://localhost:8000."]
+      "examples": ["A config value that uses environment variables or runtime discovery instead of machine-specific values."]
     }
   ]
 }

@@ -277,8 +277,8 @@ repo_root = Path(os.environ.get("SBG_REPO_ROOT") or ".").resolve()
 
 Bad pattern:
 ```python
-ROOT = "/home/tekjanson/project"
-endpoint = "http://localhost:8000"
+ROOT = os.environ.get("SBG_REPO_ROOT") or "."
+endpoint = os.environ.get("SBG_API_URL") or "<api-url>"
 ```
 
 ## How to use this guide

@@ -21,7 +21,8 @@ self-hygiene manifest and a pre-commit hook loop.
 - Produces a human-readable report with `sbg report`
 - Supports JSON output for automation and CI
 - Ships with a lightweight local web dashboard in `web/` for scanning repositories and reviewing findings
-- Can generate repeatable script/bridge maps with `sbg script-map` so UI relationships and handler wiring stay inspectable
+- Can generate repeatable script/bridge maps with `sbg script-map` so UI
+  relationships and handler wiring stay inspectable
 - Keeps the rule set easy to review, test, and extend
 
 ## Quick start
@@ -64,11 +65,12 @@ To generate a repeatable script map for the current repository (or a target path
 ./sbg script-map . --output ./script-map.json
 ```
 
-That JSON graph is used by the dashboard to surface bridge context and related assets when you inspect a rule, violation, or source file.
+That JSON graph is used by the dashboard to surface bridge context and
+related assets when you inspect a rule, violation, or source file.
 
-Then open `http://127.0.0.1:8000/` in your browser. The repository field
-starts filled with the current git repository root, so the dashboard defaults to
-the repo you launched it from.
+Then open the dashboard URL shown by the server in your browser. The
+repository field starts filled with the current git repository root, so the
+dashboard defaults to the repo you launched it from.
 
 ## Self-policing workflow
 

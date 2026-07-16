@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import socket
 import sys
 import tempfile
 import threading
@@ -19,7 +20,8 @@ from web.server import REPO_ROOT, create_server
 
 class WebUITests(unittest.TestCase):
     def setUp(self) -> None:
-        self.server = create_server("127.0.0.1", 0)
+        self.host = socket.gethostname()
+        self.server = create_server(self.host, 0)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
 

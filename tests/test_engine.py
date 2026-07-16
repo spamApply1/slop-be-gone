@@ -105,7 +105,9 @@ class RuleEngineTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            engine = RuleEngine({"rules": [{"id": "fully-defined-rules", "type": "fully-defined-rules", "enabled": True}]})
+            engine = RuleEngine(
+                {"rules": [{"id": "fully-defined-rules", "type": "fully-defined-rules", "enabled": True}]}
+            )
             violations = engine.scan_repository(repo_root)
 
             violation_ids = {violation.rule_id for violation in violations}
@@ -143,7 +145,8 @@ class RuleEngineTests(unittest.TestCase):
     def test_dynamic_config_rule_flags_hard_coded_paths(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = Path(temp_dir)
-            (repo_root / "app.py").write_text("ROOT = '/home/tekjanson/project'\n", encoding="utf-8")
+            hard_coded_value = str(Path(temp_dir) / "project")
+            (repo_root / "app.py").write_text(f"ROOT = '{hard_coded_value}'\n", encoding="utf-8")
             engine = RuleEngine({"rules": [{"id": "dynamic-config", "type": "dynamic-config", "enabled": True}]})
             violations = engine.scan_repository(repo_root)
 

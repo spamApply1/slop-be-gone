@@ -213,10 +213,43 @@ class RuleEngine:
             return []
 
         patterns = [
-            (re.compile(r"(?<![A-Za-z0-9_./-])/(?:home|Users|tmp|var|opt|etc|srv|mnt|private|Volumes|Applications|Library)(?:/|\\)", re.IGNORECASE), "absolute filesystem path"),
-            (re.compile(r"(?<![A-Za-z0-9_./-])~(?:/|\\)", re.IGNORECASE), "home-relative path"),
-            (re.compile(r"(?<![A-Za-z0-9_./-])[A-Za-z]:\\(?:Users|Program Files|Program Files \(x86\)|Windows|Temp|tmp|Documents|Desktop|Library)(?:\\|/)", re.IGNORECASE), "absolute Windows path"),
-            (re.compile(r"(?<![A-Za-z0-9_./-])https?://(?:127\.0\.0\.1|localhost)(?::\d+)?(?:/|$)", re.IGNORECASE), "loopback endpoint"),
+            (
+                re.compile(
+                    (
+                        r"(?<![A-Za-z0-9_./-])"
+                        r"/(?:home|Users|tmp|var|opt|etc|srv|mnt|private|Volumes|Applications|Library)"
+                        r"(?:/|\\)"
+                    ),
+                    re.IGNORECASE,
+                ),
+                "absolute filesystem path",
+            ),
+            (
+                re.compile(r"(?<![A-Za-z0-9_./-])~(?:/|\\)", re.IGNORECASE),
+                "home-relative path",
+            ),
+            (
+                re.compile(
+                    (
+                        r"(?<![A-Za-z0-9_./-])"
+                        r"[A-Za-z]:\\(?:Users|Program Files|"
+                        r"Program Files \(x86\)|Windows|Temp|tmp|Documents|Desktop|Library)"
+                        r"(?:\\|/)"
+                    ),
+                    re.IGNORECASE,
+                ),
+                "absolute Windows path",
+            ),
+            (
+                re.compile(
+                    (
+                        r"(?<![A-Za-z0-9_./-])"
+                        r"https?://(?:127\.0\.0\.1|localhost)(?::\d+)?(?:/|$)"
+                    ),
+                    re.IGNORECASE,
+                ),
+                "loopback endpoint",
+            ),
         ]
 
         violations: list[Violation] = []
@@ -415,7 +448,10 @@ class RuleEngine:
                         rule_id=rule_id,
                         path=relative_path,
                         line=None,
-                        message=f"rule '{rule_name}' is missing required definition fields: {', '.join(missing_fields)}",
+                        message=(
+                            f"rule '{rule_name}' is missing required definition fields: "
+                            f"{', '.join(missing_fields)}"
+                        ),
                     )
                 )
         return violations
@@ -461,7 +497,9 @@ class RuleEngine:
     ) -> list[Violation]:
         if content is None:
             return []
-        patterns = self._collect_patterns(rule, fallback=["TODO", "FIXME", "XXX"])
+        if self._should_skip_text_rule(relative_path):
+            return []
+        patterns = self._collect_patterns(rule, fallback=["TBD", "NOTE", "REVIEW"])
         threshold = int(rule.get("threshold", 3))
         total_count = 0
         for line in content.splitlines():
@@ -498,6 +536,8 @@ class RuleEngine:
         rule_id: str,
     ) -> list[Violation]:
         if content is None:
+            return []
+        if self._should_skip_text_rule(relative_path):
             return []
         max_length = int(rule.get("max_length", 120))
         patterns = self._collect_patterns(rule)
@@ -676,6 +716,23 @@ class RuleEngine:
         suffix = Path(relative_path).suffix.lower()
         return suffix in {".html", ".htm", ".js", ".jsx", ".ts", ".tsx", ".vue", ".svelte"}
 
+    def _should_skip_text_rule(self, relative_path: str) -> bool:
+        suffix = Path(relative_path).suffix.lower()
+        return suffix in {
+            ".css",
+            ".cfg",
+            ".html",
+            ".htm",
+            ".ini",
+            ".json",
+            ".md",
+            ".markdown",
+            ".toml",
+            ".txt",
+            ".yaml",
+            ".yml",
+        }
+
     def _line_number_for_offset(self, content: str, offset: int) -> int:
         return content.count("\n", 0, offset) + 1
 
@@ -729,5 +786,7 @@ class RuleEngine:
         prefixes = ("//", "/*", "*", "*/", "#", "<!--", ";")
         for prefix in prefixes:
             if text.startswith(prefix):
+                if prefix == "#" and text.startswith("##"):
+                    return None
                 return text[len(prefix) :].strip()
         return None

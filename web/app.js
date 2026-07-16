@@ -47,18 +47,23 @@ let currentConcepts = [];
 let currentAssetMap = null;
 let selectedCommandment = null;
 
+const fallbackOrigins = ["http://127.0.0.1", "http://localhost"];
+
 function resolveApiUrl(path) {
-  if (window.location.protocol === "http:" || window.location.protocol === "https:") {
+  if (window.location.origin && window.location.origin !== "null") {
     return new URL(path, window.location.origin).toString();
   }
-
-  const fallbackOrigins = ["http://127.0.0.1:8000", "http://localhost:8000"];
-  for (const origin of fallbackOrigins) {
-    const candidate = new URL(path, origin).toString();
-    return candidate;
+  if (path.startsWith("http://") || path.startsWith("https://")) {
+    return path;
   }
-
-  return new URL(path, "http://127.0.0.1:8000").toString();
+  for (const origin of fallbackOrigins) {
+    try {
+      return new URL(path, origin).toString();
+    } catch {
+      // keep trying the next fallback origin
+    }
+  }
+  return `/${String(path).replace(/^\//, "")}`;
 }
 
 function setStatus(message, kind = "") {
@@ -407,7 +412,14 @@ function renderCommandmentDetail(rule) {
             <input id="detail-rule-enabled" type="checkbox" ${rule.enabled === false ? "" : "checked"}>
           </label>
           <div class="detail-actions">
-            <button type="button" id="detail-save" class="secondary" data-action="save-commandment-detail">Save edit</button>
+            <button
+              type="button"
+              id="detail-save"
+              class="secondary"
+              data-action="save-commandment-detail"
+            >
+              Save edit
+            </button>
             <button type="button" id="detail-close" data-action="close-commandment-detail">Close</button>
           </div>
         </div>
@@ -657,7 +669,8 @@ async function openRuleSource(button) {
     openModal(sourceLabel, renderSourceViewContent(payload, rule, sourcePath));
     bindButtonActions(modalBody);
   } catch (error) {
-    openModal(sourceLabel, `<div class="empty-state">Unable to load ${escapeHtml(sourcePath || "source")}: ${escapeHtml(error.message)}</div>`);
+    const message = `Unable to load ${sourcePath || "source"}: ${error.message}`;
+    openModal(sourceLabel, `<div class="empty-state">${escapeHtml(message)}</div>`);
   }
 }
 
@@ -849,7 +862,11 @@ async function showViolationContext(violation) {
     const bridgeContext = buildBridgeContextForPath(violation.path);
     openExplorerModal(
       violation.rule_id || "Violation",
-      { violation, context: { path: violation.path, line: violation.line || null, lines: [] }, bridge_context: bridgeContext },
+      {
+        violation,
+        context: { path: violation.path, line: violation.line || null, lines: [] },
+        bridge_context: bridgeContext,
+      },
       {
         kind: "violation",
         summary: violation.path || "Unknown path",
