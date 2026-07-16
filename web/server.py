@@ -17,6 +17,23 @@ SRC_ROOT = REPO_ROOT / "src"
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
+
+def resolve_default_repo_root() -> Path:
+    configured_repo = os.environ.get("SBG_DASHBOARD_REPO_ROOT")
+    if configured_repo:
+        candidate = Path(configured_repo).expanduser()
+        if not candidate.is_absolute():
+            candidate = (Path.cwd() / candidate).resolve()
+        return candidate
+
+    current_dir = Path.cwd().resolve()
+    for candidate in [current_dir, *current_dir.parents]:
+        git_marker = candidate / ".git"
+        if git_marker.exists():
+            return candidate
+
+    return REPO_ROOT.resolve()
+
 from sbg.engine import RuleEngine
 from sbg.manifest import resolve_manifest_path
 
@@ -65,6 +82,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
         payload = {
             "manifest_path": str(manifest_path),
             "manifest": manifest_data,
+            "default_repo_root": str(resolve_default_repo_root()),
         }
         self._send_json(payload)
 
@@ -79,12 +97,15 @@ class DashboardHandler(BaseHTTPRequestHandler):
             body = self.rfile.read(length).decode("utf-8")
             payload = json.loads(body)
 
-        repo_root = payload.get("repo_root", ".")
+        repo_root = payload.get("repo_root")
         manifest_path = payload.get("manifest_path") or None
 
-        resolved_repo = Path(repo_root).expanduser()
-        if not resolved_repo.is_absolute():
-            resolved_repo = (Path.cwd() / resolved_repo).resolve()
+        if repo_root:
+            resolved_repo = Path(repo_root).expanduser()
+            if not resolved_repo.is_absolute():
+                resolved_repo = (Path.cwd() / resolved_repo).resolve()
+        else:
+            resolved_repo = resolve_default_repo_root()
 
         manifest_target = None
         if manifest_path:

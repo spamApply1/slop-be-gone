@@ -13,7 +13,7 @@ if str(ROOT) not in sys.path:
 if str(ROOT / "src") not in sys.path:
     sys.path.insert(0, str(ROOT / "src"))
 
-from web.server import create_server
+from web.server import REPO_ROOT, create_server
 
 
 class WebUITests(unittest.TestCase):
@@ -58,6 +58,7 @@ class WebUITests(unittest.TestCase):
         payload = json.loads(manifest_payload)
         self.assertIn("manifest", payload)
         self.assertIn("rules", payload["manifest"])
+        self.assertEqual(payload["default_repo_root"], str(Path.cwd().resolve()))
 
     def test_scan_endpoint_uses_rule_engine(self) -> None:
         fixture_repo = ROOT / "tests" / "fixtures" / "fixture_repo"

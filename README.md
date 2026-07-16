@@ -57,9 +57,9 @@ To launch the local dashboard, run:
 
 You can also run `python3 web/server.py` directly if you want to customize the host or port.
 
-Then open `http://127.0.0.1:8000/` in your browser. The page also works
-when opened directly from the filesystem as long as the local server is
-running.
+Then open `http://127.0.0.1:8000/` in your browser. The repository field
+starts filled with the current git repository root, so the dashboard defaults to
+the repo you launched it from.
 
 ## Self-policing workflow
 
