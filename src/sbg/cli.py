@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .engine import RuleEngine, validate_manifest
-from .manifest import resolve_manifest_path
+from .manifest import resolve_bundled_docs_path, resolve_manifest_path
 from .script_maps import build_script_map
 
 
@@ -297,7 +297,6 @@ def run_validate(args: argparse.Namespace) -> int:
 def run_init(args: argparse.Namespace) -> int:
     repo_root = Path(args.repo_root).expanduser().resolve()
     bundled_manifest = resolve_manifest_path(None)
-    bundled_root = bundled_manifest.parent
     target_manifest = repo_root / "sbg_manifest.json"
 
     if target_manifest.exists() and not args.force:
@@ -317,8 +316,8 @@ def run_init(args: argparse.Namespace) -> int:
     target_manifest.write_text(manifest_text, encoding="utf-8")
     written = [target_manifest]
 
-    bundled_docs = bundled_root / "docs" / "hygiene-rules.md"
-    if bundled_docs.is_file():
+    bundled_docs = resolve_bundled_docs_path()
+    if bundled_docs is not None:
         target_docs = repo_root / "docs" / "hygiene-rules.md"
         if not target_docs.exists() or args.force:
             target_docs.parent.mkdir(parents=True, exist_ok=True)

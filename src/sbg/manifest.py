@@ -4,6 +4,17 @@ import json
 from pathlib import Path
 from typing import Any
 
+_PACKAGE_ROOT = Path(__file__).resolve().parent
+_BUNDLED_DATA = _PACKAGE_ROOT / "data"
+_CHECKOUT_ROOT = _PACKAGE_ROOT.parents[1]
+
+
+def _default_data_path(repo_filename: str, bundled_filename: str) -> Path:
+    checkout_copy = _CHECKOUT_ROOT / repo_filename
+    if checkout_copy.is_file():
+        return checkout_copy
+    return _BUNDLED_DATA / bundled_filename
+
 
 def resolve_manifest_path(path: str | Path | None = None, repo_root: str | Path | None = None) -> Path:
     if path is not None:
@@ -14,7 +25,7 @@ def resolve_manifest_path(path: str | Path | None = None, repo_root: str | Path 
             else:
                 candidate = candidate.resolve()
         return candidate.resolve()
-    return Path(__file__).resolve().parents[2] / "sbg_manifest.json"
+    return _default_data_path("sbg_manifest.json", "default_manifest.json")
 
 
 def resolve_concepts_path(path: str | Path | None = None, repo_root: str | Path | None = None) -> Path:
@@ -26,7 +37,14 @@ def resolve_concepts_path(path: str | Path | None = None, repo_root: str | Path 
             else:
                 candidate = candidate.resolve()
         return candidate.resolve()
-    return Path(__file__).resolve().parents[2] / "sbg_concepts.json"
+    return _default_data_path("sbg_concepts.json", "concepts.json")
+
+
+def resolve_bundled_docs_path() -> Path | None:
+    for candidate in (_CHECKOUT_ROOT / "docs" / "hygiene-rules.md", _BUNDLED_DATA / "hygiene-rules.md"):
+        if candidate.is_file():
+            return candidate
+    return None
 
 
 def load_manifest(path: str | Path | None = None, repo_root: str | Path | None = None) -> dict[str, Any]:
