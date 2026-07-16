@@ -559,7 +559,7 @@ def create_server(host: str = "0.0.0.0", port: int = 8000) -> ThreadingHTTPServe
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Serve the SBG dashboard locally")
-    parser.add_argument("--host", default=os.environ.get("SBG_WEB_HOST", "0.0.0.0"))
+    parser.add_argument("--host", default=os.environ.get("SBG_WEB_HOST", "127.0.0.1"))
     parser.add_argument("--port", type=int, default=int(os.environ.get("SBG_WEB_PORT", "8000")))
     args = parser.parse_args()
     server = create_server(args.host, args.port)
