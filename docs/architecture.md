@@ -2,9 +2,16 @@
 
 ## Slop Be Gone vision
 
-Slop Be Gone is an opinionated framework for reducing repository churn and cleanup overhead without depending on centralized infrastructure. The core idea is to let developers declare lightweight manifests that describe how their workspace should be kept tidy, then run local automation to enforce those rules.
+Slop Be Gone is an opinionated framework for reducing repository churn and
+cleanup overhead without depending on centralized infrastructure. The core idea
+is to let developers declare lightweight manifests that describe how their
+workspace should be kept tidy, then run local automation to enforce those
+rules.
 
-The first implementation is intentionally simple: it scans a repository, applies a default manifest, and fails fast on obvious hygiene violations. That makes it useful both for local development and for CI pipelines that need to refuse noisy or low-quality AI output.
+The first implementation is intentionally simple: it scans a repository,
+applies a default manifest, and fails fast on obvious hygiene violations. That
+makes it useful both for local development and for CI pipelines that need to
+refuse noisy or low-quality AI output.
 
 ## Design goals
 

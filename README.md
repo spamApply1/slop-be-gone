@@ -1,13 +1,23 @@
 # Slop Be Gone
 
-Slop Be Gone is a local-first hygiene framework for agentic codebases. It uses manifest-driven rules to flag slop patterns that tend to show up when AI-generated patches are allowed to drift: placeholder comments, TODO/FIXME/XXX spam, empty files, overly long lines, and oversized files.
+Slop Be Gone is a local-first hygiene framework for agentic codebases. It is
+meant for anyone who wants a lightweight, repository-friendly way to keep
+AI-assisted changes from drifting into slop. It uses manifest-driven rules to
+flag common hygiene failures such as placeholder comments, TODO/FIXME/XXX
+spam, empty files, overly long lines, and oversized files.
 
-The project is inspired by the manifest-driven spirit of idud-hygiene, but it is intentionally opinionated for the agentic-only workflow where quality gates must fail loudly and early.
+The project is inspired by the manifest-driven spirit of idud-hygiene, but it
+is intentionally opinionated for the agentic-only workflow where quality gates
+must fail loudly and early. This repository uses SBG to police itself with a
+self-hygiene manifest and a pre-commit hook loop.
 
 ## What it does
 
 - Scans a repository with a default manifest in `sbg_manifest.json`
 - Prints clear violations and exits non-zero when damage is detected
+- Supports staged-file checks with `sbg check --staged`
+- Installs a pre-commit hook with `sbg install-hooks`
+- Produces a human-readable report with `sbg report`
 - Supports JSON output for automation and CI
 - Keeps the rule set easy to review, test, and extend
 
@@ -23,6 +33,34 @@ For automation-friendly output:
 ```bash
 ./sbg check . --json
 ```
+
+To enforce hygiene on staged changes before a commit:
+
+```bash
+./sbg install-hooks
+./sbg check --staged .
+```
+
+To get a grouped summary with suggestions:
+
+```bash
+./sbg report .
+```
+
+## Self-policing workflow
+
+This repository uses `sbg_self_manifest.json` as its self-hygiene policy and
+installs a pre-commit hook that runs SBG against staged changes before each
+commit. The same pattern is reusable for other repositories:
+
+```bash
+python3 -m pip install -e .
+./sbg install-hooks --manifest ./sbg_self_manifest.json .
+./sbg check --staged --manifest ./sbg_self_manifest.json .
+```
+
+See [docs/self-hygiene.md](docs/self-hygiene.md) for the full hook-based
+commit loop and the intended enterprise rollout.
 
 ## Project layout
 

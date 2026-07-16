@@ -3,7 +3,10 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import os
+import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -40,6 +43,91 @@ class CLITests(unittest.TestCase):
         self.assertTrue(payload)
         rule_ids = {entry["rule_id"] for entry in payload}
         self.assertIn("placeholder-comments", rule_ids)
+
+    def test_check_staged_scans_only_staged_files(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_path = Path(temp_dir)
+            subprocess.run(["git", "init"], cwd=repo_path, check=True, capture_output=True, text=True)
+            subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo_path, check=True)
+            subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo_path, check=True)
+
+            (repo_path / "tracked.txt").write_text("hello\n", encoding="utf-8")
+            subprocess.run(["git", "add", "tracked.txt"], cwd=repo_path, check=True)
+            subprocess.run(
+                ["git", "commit", "-m", "initial"],
+                cwd=repo_path,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            staged_path = repo_path / "staged.py"
+            staged_path.write_text("// placeholder content\n", encoding="utf-8")
+            subprocess.run(["git", "add", "staged.py"], cwd=repo_path, check=True)
+
+            unstaged_path = repo_path / "unstaged.py"
+            unstaged_path.write_text("// placeholder content\n", encoding="utf-8")
+
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                exit_code = main(["check", str(repo_path), "--staged"])
+
+            self.assertEqual(exit_code, 1)
+            output = stdout.getvalue()
+            self.assertIn("staged.py", output)
+            self.assertNotIn("unstaged.py", output)
+
+    def test_install_hooks_creates_executable_pre_commit_hook(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_path = Path(temp_dir)
+            subprocess.run(["git", "init"], cwd=repo_path, check=True, capture_output=True, text=True)
+
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                exit_code = main(["install-hooks", str(repo_path)])
+
+            self.assertEqual(exit_code, 0)
+            hook_path = repo_path / ".git" / "hooks" / "pre-commit"
+            self.assertTrue(hook_path.exists())
+            self.assertTrue(os.access(hook_path, os.X_OK))
+            contents = hook_path.read_text(encoding="utf-8")
+            self.assertIn("sbg.cli check --staged", contents)
+
+    def test_install_hooks_can_use_custom_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_path = Path(temp_dir)
+            subprocess.run(["git", "init"], cwd=repo_path, check=True, capture_output=True, text=True)
+            manifest_path = repo_path / "custom_manifest.json"
+            manifest_path.write_text(
+                '{"rules": [{"id": "empty-files", "type": "empty-files", "enabled": true}]}',
+                encoding="utf-8",
+            )
+
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                exit_code = main(
+                    ["install-hooks", str(repo_path), "--manifest", str(manifest_path)]
+                )
+
+            self.assertEqual(exit_code, 0)
+            hook_path = repo_path / ".git" / "hooks" / "pre-commit"
+            contents = hook_path.read_text(encoding="utf-8")
+            self.assertIn("--manifest", contents)
+            self.assertIn(str(manifest_path), contents)
+
+    def test_report_groups_by_rule_with_suggestions(self) -> None:
+        fixture_repo = ROOT / "tests" / "fixtures" / "fixture_repo"
+        stdout = io.StringIO()
+
+        with contextlib.redirect_stdout(stdout):
+            exit_code = main(["report", str(fixture_repo)])
+
+        self.assertEqual(exit_code, 1)
+        output = stdout.getvalue()
+        self.assertIn("Hygiene report", output)
+        self.assertIn("placeholder-comments", output)
+        self.assertIn("Suggestion:", output)
+        self.assertIn("Remove placeholder comments", output)
 
 
 if __name__ == "__main__":

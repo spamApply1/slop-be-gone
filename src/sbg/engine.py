@@ -1,13 +1,24 @@
 from __future__ import annotations
 
 import os
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from .manifest import load_manifest
 
-IGNORED_DIRS = {".git", ".hg", ".svn", ".venv", "node_modules", "__pycache__", ".pytest_cache", "target"}
+IGNORED_DIRS = {
+    ".git",
+    ".hg",
+    ".svn",
+    ".venv",
+    "node_modules",
+    "__pycache__",
+    ".pytest_cache",
+    "target",
+    "fixtures",
+}
 
 
 @dataclass(frozen=True)
@@ -40,17 +51,60 @@ class RuleEngine:
 
     def scan_repository(self, repo_root: str | Path) -> list[Violation]:
         repo_root = Path(repo_root).expanduser().resolve()
-        violations: list[Violation] = []
         files = self._collect_files(repo_root)
+        return self.scan_paths(repo_root, (path for path, _ in files))
+
+    def scan_paths(
+        self,
+        repo_root: str | Path,
+        file_paths: list[str | Path] | tuple[str | Path, ...] | set[str | Path],
+    ) -> list[Violation]:
+        repo_root = Path(repo_root).expanduser().resolve()
+        violations: list[Violation] = []
         rules = [rule for rule in self.manifest.get("rules", []) if rule.get("enabled", True)]
 
-        for file_path, relative_path in files:
-            file_size = file_path.stat().st_size
-            content = self._read_text(file_path)
+        for raw_path in file_paths:
+            if raw_path is None:
+                continue
+            candidate = Path(raw_path)
+            if not candidate.is_absolute():
+                candidate = (repo_root / candidate).resolve()
+            else:
+                candidate = candidate.expanduser().resolve()
+            if not candidate.exists() or not candidate.is_file():
+                continue
+            try:
+                relative_path = candidate.relative_to(repo_root).as_posix()
+            except ValueError:
+                relative_path = candidate.as_posix()
+            file_size = candidate.stat().st_size
+            content = self._read_text(candidate)
             for rule in rules:
-                violations.extend(self._apply_rule(rule, repo_root, file_path, relative_path, content, file_size))
+                violations.extend(self._apply_rule(rule, repo_root, candidate, relative_path, content, file_size))
 
         return sorted(violations, key=lambda violation: (violation.path, violation.line or 0, violation.rule_id))
+
+    def scan_staged_files(self, repo_root: str | Path) -> list[Violation]:
+        repo_root = Path(repo_root).expanduser().resolve()
+        try:
+            root_result = subprocess.run(
+                ["git", "-C", str(repo_root), "rev-parse", "--show-toplevel"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            git_root = Path(root_result.stdout.strip()).expanduser().resolve()
+            result = subprocess.run(
+                ["git", "-C", str(git_root), "diff", "--cached", "--name-only"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except (FileNotFoundError, OSError, subprocess.CalledProcessError):
+            return []
+
+        staged_paths = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+        return self.scan_paths(git_root, staged_paths)
 
     def _collect_files(self, repo_root: Path) -> list[tuple[Path, str]]:
         collected: list[tuple[Path, str]] = []
