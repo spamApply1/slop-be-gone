@@ -50,7 +50,8 @@ class WebUITests(unittest.TestCase):
 
         status, js = self._request("/app.js")
         self.assertEqual(status, 200)
-        self.assertIn("DEFAULT_SERVER", js)
+        self.assertIn("resolveApiUrl", js)
+        self.assertIn("fallbackOrigins", js)
 
         status, manifest_payload = self._request("/api/manifest")
         self.assertEqual(status, 200)

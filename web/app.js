@@ -1,5 +1,3 @@
-const DEFAULT_SERVER = "http://127.0.0.1:8000";
-
 const form = document.getElementById("scan-form");
 const repoPathInput = document.getElementById("repo-path");
 const manifestPathInput = document.getElementById("manifest-path");
@@ -20,7 +18,14 @@ function resolveApiUrl(path) {
   if (window.location.protocol === "http:" || window.location.protocol === "https:") {
     return new URL(path, window.location.origin).toString();
   }
-  return new URL(path, DEFAULT_SERVER).toString();
+
+  const fallbackOrigins = ["http://127.0.0.1:8000", "http://localhost:8000"];
+  for (const origin of fallbackOrigins) {
+    const candidate = new URL(path, origin).toString();
+    return candidate;
+  }
+
+  return new URL(path, "http://127.0.0.1:8000").toString();
 }
 
 function setStatus(message, kind = "") {

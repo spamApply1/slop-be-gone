@@ -52,8 +52,10 @@ To get a grouped summary with suggestions:
 To launch the local dashboard, run:
 
 ```bash
-python3 web/server.py
+./scripts/start-dashboard.sh
 ```
+
+You can also run `python3 web/server.py` directly if you want to customize the host or port.
 
 Then open `http://127.0.0.1:8000/` in your browser. The page also works
 when opened directly from the filesystem as long as the local server is
