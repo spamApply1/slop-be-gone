@@ -8,6 +8,7 @@ const manifestPanel = document.getElementById("manifest-panel");
 const summaryList = document.getElementById("summary-list");
 const commandmentsList = document.getElementById("commandments-list");
 const commandmentsCount = document.getElementById("commandments-count");
+const commandmentDetail = document.getElementById("commandment-detail");
 const manifestEditor = document.getElementById("manifest-editor");
 const conceptsList = document.getElementById("concepts-list");
 const violationsList = document.getElementById("violations-list");
@@ -36,6 +37,7 @@ const patternPreviewSummary = document.getElementById("pattern-preview-summary")
 let currentManifest = null;
 let currentViolations = [];
 let currentConcepts = [];
+let selectedCommandment = null;
 
 function resolveApiUrl(path) {
   if (window.location.protocol === "http:" || window.location.protocol === "https:") {
@@ -117,6 +119,7 @@ function renderCommandments(rules) {
   commandmentsList.innerHTML = "";
   commandmentsCount.textContent = `${rules.length} rule${rules.length === 1 ? "" : "s"}`;
   if (!rules.length) {
+    commandmentDetail.classList.add("hidden");
     commandmentsList.innerHTML = '<div class="empty-state">No commandments have been frozen yet.</div>';
     return;
   }
@@ -134,18 +137,115 @@ function renderCommandments(rules) {
           : rule.max_bytes
             ? `max_bytes: ${escapeHtml(rule.max_bytes)}`
             : "custom rule";
+    const isActive = selectedCommandment && selectedCommandment.id === rule.id;
+    const cardClasses = `commandment-card${isActive ? " active" : ""}`;
     return `
-      <div class="commandment-card">
+      <button type="button" class="${cardClasses}" data-rule-id="${escapeHtml(rule.id || "")}">
         <header>
           <span class="rule-id">${ruleId}</span>
           <span class="meta">${escapeHtml(status)}</span>
         </header>
         <p>${description}</p>
         <div class="meta">${detail}</div>
-      </div>
+      </button>
     `;
   });
   commandmentsList.innerHTML = cards.join("");
+
+  const buttons = commandmentsList.querySelectorAll(".commandment-card");
+  buttons.forEach((button) => {
+    button.addEventListener("click", () => {
+      const ruleId = button.getAttribute("data-rule-id");
+      const rule = rules.find((candidate) => candidate.id === ruleId);
+      if (rule) {
+        selectedCommandment = rule;
+        renderCommandments(rules);
+      }
+    });
+  });
+
+  if (selectedCommandment) {
+    const activeRule = rules.find((candidate) => candidate.id === selectedCommandment.id);
+    if (activeRule) {
+      renderCommandmentDetail(activeRule);
+    }
+  }
+}
+
+function renderCommandmentDetail(rule) {
+  if (!rule) {
+    commandmentDetail.classList.add("hidden");
+    commandmentDetail.innerHTML = "";
+    return;
+  }
+
+  commandmentDetail.classList.remove("hidden");
+  const patternValue = rule.pattern || (rule.patterns ? rule.patterns.join(", ") : "");
+  commandmentDetail.innerHTML = `
+    <div class="panel-header">
+      <h3>${escapeHtml(rule.id || rule.type || "Commandment")}</h3>
+      <span class="count-pill">${escapeHtml(rule.type || "custom")}</span>
+    </div>
+    <label>
+      <span>Rule id</span>
+      <input id="detail-rule-id" type="text" value="${escapeHtml(rule.id || "")}">
+    </label>
+    <label>
+      <span>Description</span>
+      <textarea id="detail-rule-description" rows="3">${escapeHtml(rule.description || "")}</textarea>
+    </label>
+    <label>
+      <span>Pattern text</span>
+      <input id="detail-rule-pattern" type="text" value="${escapeHtml(patternValue)}">
+    </label>
+    <label>
+      <span>Enabled</span>
+      <input id="detail-rule-enabled" type="checkbox" ${rule.enabled === false ? "" : "checked"}>
+    </label>
+    <div class="detail-actions">
+      <button type="button" id="detail-save" class="secondary">Save edit</button>
+      <button type="button" id="detail-close">Close</button>
+    </div>
+  `;
+
+  const saveButton = commandmentDetail.querySelector("#detail-save");
+  saveButton.addEventListener("click", () => {
+    const updatedRules = (
+      currentManifest && currentManifest.manifest && Array.isArray(currentManifest.manifest.rules)
+        ? currentManifest.manifest.rules
+        : []
+    ).map((candidate) => {
+      if (candidate.id !== rule.id) {
+        return candidate;
+      }
+      const nextId = commandmentDetail.querySelector("#detail-rule-id").value.trim() || candidate.id;
+      return {
+        ...candidate,
+        id: nextId,
+        description: commandmentDetail.querySelector("#detail-rule-description").value.trim(),
+        pattern: commandmentDetail.querySelector("#detail-rule-pattern").value.trim(),
+        enabled: commandmentDetail.querySelector("#detail-rule-enabled").checked,
+      };
+    });
+    if (currentManifest && currentManifest.manifest) {
+      currentManifest.manifest.rules = updatedRules;
+      manifestEditor.value = JSON.stringify(currentManifest.manifest, null, 2);
+      const nextId = commandmentDetail.querySelector("#detail-rule-id").value.trim();
+      selectedCommandment = updatedRules.find((candidate) => candidate.id === nextId) || null;
+      renderCommandments(updatedRules);
+      setStatus("Commandment updated in editor view.", "success");
+    }
+  });
+
+  const closeButton = commandmentDetail.querySelector("#detail-close");
+  closeButton.addEventListener("click", () => {
+    selectedCommandment = null;
+    renderCommandments(
+      currentManifest && currentManifest.manifest && Array.isArray(currentManifest.manifest.rules)
+        ? currentManifest.manifest.rules
+        : []
+    );
+  });
 }
 
 function renderConcepts(concepts) {
