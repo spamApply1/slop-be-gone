@@ -101,6 +101,77 @@ def _validate_composite_shape(label: str, rule: dict[str, Any]) -> list[str]:
     return problems
 
 
+_SECRET_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"-----BEGIN(?: [A-Z0-9]+)* PRIVATE KEY-----"), "private key block"),
+    (re.compile(r"\bAKIA[0-9A-Z]{16}\b"), "AWS access key id"),
+    (re.compile(r"\bASIA[0-9A-Z]{16}\b"), "AWS temporary access key id"),
+    (re.compile(r"\bgh[pousr]_[0-9A-Za-z]{36}\b"), "GitHub token"),
+    (re.compile(r"\bgithub_pat_[0-9A-Za-z_]{22,}\b"), "GitHub fine-grained token"),
+    (re.compile(r"\bxox[baprs]-[0-9A-Za-z-]{10,}\b"), "Slack token"),
+    (re.compile(r"\bAIza[0-9A-Za-z_\-]{35}\b"), "Google API key"),
+    (re.compile(r"\bsk_live_[0-9A-Za-z]{24,}\b"), "Stripe live secret key"),
+)
+
+
+_DEBUG_ARTIFACT_PATTERNS: tuple[tuple[frozenset[str], tuple[tuple[re.Pattern[str], str], ...]], ...] = (
+    (
+        frozenset({".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".vue"}),
+        (
+            (re.compile(r"(?<![A-Za-z0-9_.])debugger\s*;"), "debugger statement"),
+            (re.compile(r"(?<![A-Za-z0-9_.])console\.(?:log|debug|trace)\s*\("), "console debug call"),
+        ),
+    ),
+    (
+        frozenset({".py"}),
+        (
+            (re.compile(r"(?<![A-Za-z0-9_.])breakpoint\s*\("), "breakpoint call"),
+            (re.compile(r"(?<![A-Za-z0-9_.])pdb\.set_trace\s*\("), "pdb trace call"),
+        ),
+    ),
+)
+
+
+_DYNAMIC_CONFIG_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (
+        re.compile(
+            (
+                r"(?<![A-Za-z0-9_./-])"
+                r"/(?:home|Users|tmp|var|opt|etc|srv|mnt|private|Volumes|Applications|Library)"
+                r"(?:/|\\)"
+            ),
+            re.IGNORECASE,
+        ),
+        "absolute filesystem path",
+    ),
+    (
+        re.compile(r"(?<![A-Za-z0-9_./-])~(?:/|\\)", re.IGNORECASE),
+        "home-relative path",
+    ),
+    (
+        re.compile(
+            (
+                r"(?<![A-Za-z0-9_./-])"
+                r"[A-Za-z]:\\(?:Users|Program Files|"
+                r"Program Files \(x86\)|Windows|Temp|tmp|Documents|Desktop|Library)"
+                r"(?:\\|/)"
+            ),
+            re.IGNORECASE,
+        ),
+        "absolute Windows path",
+    ),
+    (
+        re.compile(
+            (
+                r"(?<![A-Za-z0-9_./-])"
+                r"https?://(?:127\.0\.0\.1|localhost)(?::\d+)?(?:/|$)"
+            ),
+            re.IGNORECASE,
+        ),
+        "loopback endpoint",
+    ),
+)
+
+
 
 @dataclass(frozen=True)
 class Violation:
@@ -540,19 +611,9 @@ class RuleEngine:
         del rule
         if content is None:
             return []
-        patterns = [
-            (re.compile(r"-----BEGIN(?: [A-Z0-9]+)* PRIVATE KEY-----"), "private key block"),
-            (re.compile(r"\bAKIA[0-9A-Z]{16}\b"), "AWS access key id"),
-            (re.compile(r"\bASIA[0-9A-Z]{16}\b"), "AWS temporary access key id"),
-            (re.compile(r"\bgh[pousr]_[0-9A-Za-z]{36}\b"), "GitHub token"),
-            (re.compile(r"\bgithub_pat_[0-9A-Za-z_]{22,}\b"), "GitHub fine-grained token"),
-            (re.compile(r"\bxox[baprs]-[0-9A-Za-z-]{10,}\b"), "Slack token"),
-            (re.compile(r"\bAIza[0-9A-Za-z_\-]{35}\b"), "Google API key"),
-            (re.compile(r"\bsk_live_[0-9A-Za-z]{24,}\b"), "Stripe live secret key"),
-        ]
         violations: list[Violation] = []
         for line_number, line in enumerate(content.splitlines(), start=1):
-            for pattern, label in patterns:
+            for pattern, label in _SECRET_PATTERNS:
                 if pattern.search(line):
                     violations.append(
                         Violation(
@@ -575,18 +636,8 @@ class RuleEngine:
         if content is None:
             return []
         suffix = Path(relative_path).suffix.lower()
-        language_patterns = {
-            frozenset({".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".vue"}): [
-                (re.compile(r"(?<![A-Za-z0-9_.])debugger\s*;"), "debugger statement"),
-                (re.compile(r"(?<![A-Za-z0-9_.])console\.(?:log|debug|trace)\s*\("), "console debug call"),
-            ],
-            frozenset({".py"}): [
-                (re.compile(r"(?<![A-Za-z0-9_.])breakpoint\s*\("), "breakpoint call"),
-                (re.compile(r"(?<![A-Za-z0-9_.])pdb\.set_trace\s*\("), "pdb trace call"),
-            ],
-        }
-        selected: list[tuple[re.Pattern[str], str]] = []
-        for suffixes, entries in language_patterns.items():
+        selected: tuple[tuple[re.Pattern[str], str], ...] = ()
+        for suffixes, entries in _DEBUG_ARTIFACT_PATTERNS:
             if suffix in suffixes:
                 selected = entries
                 break
@@ -623,52 +674,12 @@ class RuleEngine:
         if not self._is_dynamic_config_candidate(relative_path):
             return []
 
-        patterns = [
-            (
-                re.compile(
-                    (
-                        r"(?<![A-Za-z0-9_./-])"
-                        r"/(?:home|Users|tmp|var|opt|etc|srv|mnt|private|Volumes|Applications|Library)"
-                        r"(?:/|\\)"
-                    ),
-                    re.IGNORECASE,
-                ),
-                "absolute filesystem path",
-            ),
-            (
-                re.compile(r"(?<![A-Za-z0-9_./-])~(?:/|\\)", re.IGNORECASE),
-                "home-relative path",
-            ),
-            (
-                re.compile(
-                    (
-                        r"(?<![A-Za-z0-9_./-])"
-                        r"[A-Za-z]:\\(?:Users|Program Files|"
-                        r"Program Files \(x86\)|Windows|Temp|tmp|Documents|Desktop|Library)"
-                        r"(?:\\|/)"
-                    ),
-                    re.IGNORECASE,
-                ),
-                "absolute Windows path",
-            ),
-            (
-                re.compile(
-                    (
-                        r"(?<![A-Za-z0-9_./-])"
-                        r"https?://(?:127\.0\.0\.1|localhost)(?::\d+)?(?:/|$)"
-                    ),
-                    re.IGNORECASE,
-                ),
-                "loopback endpoint",
-            ),
-        ]
-
         violations: list[Violation] = []
         for line_number, line in enumerate(content.splitlines(), start=1):
             stripped = line.strip()
             if not stripped:
                 continue
-            for pattern, label in patterns:
+            for pattern, label in _DYNAMIC_CONFIG_PATTERNS:
                 if pattern.search(stripped):
                     violations.append(
                         Violation(
