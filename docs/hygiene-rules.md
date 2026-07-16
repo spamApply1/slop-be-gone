@@ -383,6 +383,27 @@ How to fix:
 - Remove the debugging statement, or replace it with an intentional, configured
   logging call that belongs in the codebase.
 
+## Rule severity
+
+Every rule accepts an optional `severity` of `error` (default) or `warning`.
+
+- `error`: a violation fails the check (non-zero exit), blocking the commit.
+- `warning`: a violation is printed but does not fail the check, unless the
+  scan is run with `sbg check --strict`.
+
+This supports gradual rollout: introduce a new rule as a `warning`, let a team
+see the findings without breaking their workflow, then promote it to `error`
+once the codebase is clean.
+
+```json
+{
+  "id": "long-lines",
+  "type": "long-lines",
+  "max_length": 120,
+  "severity": "warning"
+}
+```
+
 ## Scoping any rule with include / exclude
 
 Every rule (not just `composite`) accepts optional `include` and `exclude`

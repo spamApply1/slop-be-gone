@@ -206,5 +206,27 @@ class CLITests(unittest.TestCase):
             self.assertIn("Refusing to overwrite", stderr.getvalue())
 
 
+    def test_check_warning_severity_does_not_block_unless_strict(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_path = Path(temp_dir)
+            (repo_path / "sbg_manifest.json").write_text(
+                '{"rules": [{"id": "empty-files", "type": "empty-files", "enabled": true, "severity": "warning"}]}',
+                encoding="utf-8",
+            )
+            (repo_path / "blank.txt").write_text("", encoding="utf-8")
+
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                exit_code = main(["check", str(repo_path)])
+            self.assertEqual(exit_code, 0)
+            self.assertIn("(warning)", stdout.getvalue())
+            self.assertIn("warning(s)", stdout.getvalue())
+
+            strict_out = io.StringIO()
+            with contextlib.redirect_stdout(strict_out):
+                strict_code = main(["check", str(repo_path), "--strict"])
+            self.assertEqual(strict_code, 1)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -4,7 +4,7 @@ import json
 import os
 import re
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -79,6 +79,11 @@ def validate_manifest(manifest: Any) -> list[str]:
             errors.append(f"{label} has unknown type '{rule_type}'")
         elif rule_type == "composite":
             errors.extend(_validate_composite_shape(label, rule))
+        severity = rule.get("severity")
+        if severity is not None and (
+            not isinstance(severity, str) or severity.strip().lower() not in {"error", "warning"}
+        ):
+            errors.append(f"{label} has invalid 'severity' (must be 'error' or 'warning')")
     return errors
 
 
@@ -103,15 +108,22 @@ class Violation:
     path: str
     line: int | None
     message: str
+    severity: str = "error"
 
     def format(self) -> str:
         location = self.path
         if self.line is not None:
             location = f"{location}:{self.line}"
-        return f"{location}: [{self.rule_id}] {self.message}"
+        severity_marker = "" if self.severity == "error" else f" ({self.severity})"
+        return f"{location}: [{self.rule_id}]{severity_marker} {self.message}"
 
     def as_dict(self) -> dict[str, Any]:
-        payload: dict[str, Any] = {"rule_id": self.rule_id, "path": self.path, "message": self.message}
+        payload: dict[str, Any] = {
+            "rule_id": self.rule_id,
+            "path": self.path,
+            "message": self.message,
+            "severity": self.severity,
+        }
         if self.line is not None:
             payload["line"] = self.line
         return payload
@@ -142,8 +154,11 @@ class RuleEngine:
         repo_context = self._build_repo_context(repo_root, file_paths)
 
         for rule in rules:
+            severity = self._rule_severity(rule)
             if rule.get("type") == "composite":
-                violations.extend(self._apply_composite_rule(rule, repo_root, file_paths))
+                violations.extend(
+                    self._stamp_severity(self._apply_composite_rule(rule, repo_root, file_paths), severity)
+                )
                 continue
 
             include_selectors = self._normalize_selectors(rule.get("include"))
@@ -172,18 +187,35 @@ class RuleEngine:
                 else:
                     content = self._read_text(candidate)
                 violations.extend(
-                    self._apply_rule(
-                        rule,
-                        repo_root,
-                        candidate,
-                        relative_path,
-                        content,
-                        file_size,
-                        repo_context,
+                    self._stamp_severity(
+                        self._apply_rule(
+                            rule,
+                            repo_root,
+                            candidate,
+                            relative_path,
+                            content,
+                            file_size,
+                            repo_context,
+                        ),
+                        severity,
                     )
                 )
 
-        return sorted(violations, key=lambda violation: (violation.path, violation.line or 0, violation.rule_id))
+        return sorted(
+            violations,
+            key=lambda violation: (violation.path, violation.line or 0, violation.rule_id),
+        )
+
+    @staticmethod
+    def _rule_severity(rule: dict[str, Any]) -> str:
+        severity = str(rule.get("severity", "error")).strip().lower()
+        return severity if severity in {"error", "warning"} else "error"
+
+    @staticmethod
+    def _stamp_severity(violations: list[Violation], severity: str) -> list[Violation]:
+        if severity == "error":
+            return violations
+        return [replace(violation, severity=severity) for violation in violations]
 
     def scan_staged_files(self, repo_root: str | Path) -> list[Violation]:
         repo_root = Path(repo_root).expanduser().resolve()

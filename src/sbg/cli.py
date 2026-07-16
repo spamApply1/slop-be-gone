@@ -31,6 +31,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="scan only staged files from git diff --cached --name-only",
     )
+    check_parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="treat warning-severity violations as failures too",
+    )
 
     install_parser = subparsers.add_parser("install-hooks")
     install_parser.add_argument(
@@ -132,18 +137,27 @@ def run_check(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
     else:
         violations = engine.scan_repository(repo_root)
 
-    if violations:
-        if args.json:
-            print(json.dumps([violation.as_dict() for violation in violations]))
-        else:
-            for violation in violations:
-                print(violation.format())
-        return 1
+    engine = RuleEngine(manifest)
+    if args.staged:
+        violations = engine.scan_staged_files(repo_root)
+    else:
+        violations = engine.scan_repository(repo_root)
 
     if args.json:
-        print("[]")
+        print(json.dumps([violation.as_dict() for violation in violations]))
     else:
-        print("No violations found.")
+        for violation in violations:
+            print(violation.format())
+
+    blocking = [v for v in violations if v.severity == "error" or args.strict]
+    warnings = [v for v in violations if v.severity == "warning"]
+    if blocking:
+        return 1
+    if not args.json:
+        if warnings:
+            print(f"No blocking violations found ({len(warnings)} warning(s)).")
+        else:
+            print("No violations found.")
     return 0
 
 

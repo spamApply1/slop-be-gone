@@ -20,6 +20,8 @@ self-hygiene manifest and a pre-commit hook loop.
   committed secrets, and leftover debug artifacts
 - Lets any rule be scoped to specific paths with per-rule `include`/`exclude`
   globs, and lets you compose several checks into one idea with `composite`
+- Supports per-rule `severity` (`error` or `warning`) for gradual rollout, with
+  `sbg check --strict` to make warnings blocking
 - Validates a manifest with `sbg validate`, and refuses to scan with broken
   policy (a `check` run fails fast if the manifest is malformed)
 - Supports staged-file checks with `sbg check --staged`

@@ -273,6 +273,7 @@ class RuleEngineTests(unittest.TestCase):
                     {"id": "dup", "type": "secret-scan"},
                     {"id": "dup", "type": "not-a-real-type"},
                     {"type": "composite", "rules": [], "logic": "maybe"},
+                    {"id": "sev", "type": "empty-files", "severity": "loud"},
                 ]
             }
         )
@@ -280,6 +281,7 @@ class RuleEngineTests(unittest.TestCase):
         self.assertTrue(any("unknown type" in problem for problem in problems))
         self.assertTrue(any("non-empty 'rules'" in problem for problem in problems))
         self.assertTrue(any("'logic'" in problem for problem in problems))
+        self.assertTrue(any("invalid 'severity'" in problem for problem in problems))
 
     def test_per_rule_include_and_exclude_scope_matching(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -308,6 +310,20 @@ class RuleEngineTests(unittest.TestCase):
 
             flagged_paths = {violation.path for violation in violations}
             self.assertEqual(flagged_paths, {"src/app.py"})
+
+    def test_rule_severity_is_attached_to_violations(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = Path(temp_dir)
+            (repo_root / "blank.txt").write_text("", encoding="utf-8")
+            engine = RuleEngine(
+                {"rules": [{"id": "empty-files", "type": "empty-files", "enabled": True, "severity": "warning"}]}
+            )
+            violations = engine.scan_repository(repo_root)
+
+            self.assertTrue(violations)
+            self.assertTrue(all(violation.severity == "warning" for violation in violations))
+            self.assertIn("(warning)", violations[0].format())
+            self.assertEqual(violations[0].as_dict()["severity"], "warning")
 
 
 if __name__ == "__main__":
