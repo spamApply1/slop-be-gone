@@ -116,6 +116,27 @@ class CLITests(unittest.TestCase):
             self.assertIn("--manifest", contents)
             self.assertIn(str(manifest_path), contents)
 
+    def test_check_prefers_repo_local_manifest_when_present(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_path = Path(temp_dir)
+            # A repo-local manifest that only enables empty-files.
+            (repo_path / "sbg_manifest.json").write_text(
+                '{"rules": [{"id": "empty-files", "type": "empty-files", "enabled": true}]}',
+                encoding="utf-8",
+            )
+            (repo_path / "blank.txt").write_text("", encoding="utf-8")
+            # A scaffold marker that the bundled default would flag, but this repo's manifest ignores.
+            (repo_path / "marked.py").write_text("# placeholder\n", encoding="utf-8")
+
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                exit_code = main(["check", str(repo_path), "--json"])
+
+            self.assertEqual(exit_code, 1)
+            payload = json.loads(stdout.getvalue())
+            rule_ids = {entry["rule_id"] for entry in payload}
+            self.assertEqual(rule_ids, {"empty-files"})
+
     def test_report_groups_by_rule_with_suggestions(self) -> None:
         fixture_repo = ROOT / "tests" / "fixtures" / "fixture_repo"
         stdout = io.StringIO()

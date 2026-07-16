@@ -72,10 +72,19 @@ def main(argv: list[str] | None = None) -> int:
     parser.error("unsupported command")
 
 
+def resolve_scan_manifest(manifest: str | Path | None, repo_root: Path) -> Path:
+    if manifest is not None:
+        return resolve_manifest_path(manifest, repo_root=repo_root)
+    repo_manifest = (repo_root / "sbg_manifest.json").resolve()
+    if repo_manifest.is_file():
+        return repo_manifest
+    return resolve_manifest_path(None)
+
+
 def run_check(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
-    manifest_path = resolve_manifest_path(args.manifest)
-    engine = RuleEngine.from_manifest_path(manifest_path)
     repo_root = Path(args.repo_root).expanduser().resolve()
+    manifest_path = resolve_scan_manifest(args.manifest, repo_root)
+    engine = RuleEngine.from_manifest_path(manifest_path)
     if args.staged:
         violations = engine.scan_staged_files(repo_root)
     else:
@@ -157,9 +166,9 @@ repo_root={shlex.quote(str(git_root))}
 
 
 def run_report(args: argparse.Namespace) -> int:
-    manifest_path = resolve_manifest_path(args.manifest)
-    engine = RuleEngine.from_manifest_path(manifest_path)
     repo_root = Path(args.repo_root).expanduser().resolve()
+    manifest_path = resolve_scan_manifest(args.manifest, repo_root)
+    engine = RuleEngine.from_manifest_path(manifest_path)
     violations = engine.scan_repository(repo_root)
     if not violations:
         print("No violations found.")
