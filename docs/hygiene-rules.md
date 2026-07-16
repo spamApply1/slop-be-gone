@@ -281,6 +281,58 @@ ROOT = os.environ.get("SBG_REPO_ROOT") or "."
 endpoint = os.environ.get("SBG_API_URL") or "<api-url>"
 ```
 
+## 13. composite
+
+What it catches:
+- Higher-level "ideas" that are not a single pattern, but a combination of
+  smaller checks scoped to a set of files and combined with `all` or `any` logic.
+
+Why it matters:
+- Real hygiene expectations are often compound: "every module under `src/`
+  must pass these three checks", or "a config file must satisfy at least one of
+  these acceptable forms". A `composite` rule lets you express those compound
+  ideas by reusing the existing rule primitives instead of writing new engine
+  code each time.
+
+Fields:
+- `match` (optional): a glob or list of globs (supports `*`, `?`, and `**`)
+  matched against each file's repo-relative POSIX path. When omitted, the
+  composite applies to every scanned file.
+- `logic`: `all` (default) means every child rule must pass for each matched
+  file (violations from all children are reported). `any` means each matched
+  file must pass at least one child rule (a file is only flagged when it fails
+  every child).
+- `rules`: a list of ordinary rule definitions evaluated over the matched files.
+
+Good pattern:
+```json
+{
+  "id": "src-module-quality",
+  "type": "composite",
+  "match": ["src/**/*.py"],
+  "logic": "all",
+  "rules": [
+    { "type": "long-lines", "max_length": 120 },
+    { "type": "placeholder-comments", "patterns": ["placeholder"] }
+  ],
+  "description": "Every source module must stay readable and free of scaffolding.",
+  "what": "Bundle readability and placeholder checks for src modules.",
+  "why": "Compound expectations should be expressed as one reviewable idea.",
+  "source_refs": [{ "path": "docs/hygiene-rules.md" }]
+}
+```
+
+Bad pattern:
+```json
+{
+  "id": "src-module-quality",
+  "type": "composite",
+  "rules": [
+    { "type": "long-lines" }
+  ]
+}
+```
+
 ## How to use this guide
 
 Use these rules as a quick reference when a check fails. If a violation appears,

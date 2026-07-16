@@ -145,6 +145,20 @@
       "pattern_text": "",
       "pattern_type": "plain_text",
       "examples": ["A config value that uses environment variables or runtime discovery instead of machine-specific values."]
+    },
+    {
+      "id": "composite-idea",
+      "title": "Composite hygiene idea",
+      "category": "policy",
+      "description": "Compose several smaller checks into one higher-level idea, scoped to a set of files, combined with all/any logic.",
+      "rule_kind": "composite",
+      "pattern_name": "composite-idea",
+      "pattern_text": "",
+      "pattern_type": "plain_text",
+      "examples": [
+        "match src/**/*.py and require both long-lines and placeholder-comments to pass",
+        "logic any: a file may satisfy either of two acceptable forms"
+      ]
     }
   ]
 }

@@ -154,6 +154,74 @@ class RuleEngineTests(unittest.TestCase):
             self.assertIn("dynamic-config", violation_ids)
             self.assertTrue(any("absolute filesystem path" in violation.message for violation in violations))
 
+    def test_composite_all_logic_scopes_and_unions_child_rules(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = Path(temp_dir)
+            (repo_root / "src").mkdir()
+            (repo_root / "src" / "clean.py").write_text("value = 1\n", encoding="utf-8")
+            (repo_root / "src" / "messy.py").write_text(
+                "# placeholder\n" + ("z" * 200) + "\n", encoding="utf-8"
+            )
+            # Outside the match scope; must be ignored even though it contains a scaffold marker.
+            (repo_root / "notes.txt").write_text("# placeholder\n", encoding="utf-8")
+            engine = RuleEngine(
+                {
+                    "rules": [
+                        {
+                            "id": "src-quality",
+                            "type": "composite",
+                            "enabled": True,
+                            "logic": "all",
+                            "match": ["src/**/*.py"],
+                            "rules": [
+                                {"type": "long-lines", "max_length": 120},
+                                {"type": "placeholder-comments", "patterns": ["placeholder"]},
+                            ],
+                        }
+                    ]
+                }
+            )
+            violations = engine.scan_repository(repo_root)
+
+            flagged_paths = {violation.path for violation in violations}
+            self.assertEqual(flagged_paths, {"src/messy.py"})
+            self.assertTrue(all(violation.rule_id == "src-quality" for violation in violations))
+            messages = " ".join(violation.message for violation in violations)
+            self.assertIn("[long-lines]", messages)
+            self.assertIn("[placeholder-comments]", messages)
+
+    def test_composite_any_logic_passes_when_one_child_is_satisfied(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = Path(temp_dir)
+            # Fails only long-lines -> satisfied by the scaffold-marker child -> passes "any".
+            (repo_root / "long_only.py").write_text(("z" * 200) + "\n", encoding="utf-8")
+            # Fails both children -> satisfies neither -> violates "any".
+            (repo_root / "both_bad.py").write_text(
+                "# placeholder\n" + ("z" * 200) + "\n", encoding="utf-8"
+            )
+            engine = RuleEngine(
+                {
+                    "rules": [
+                        {
+                            "id": "either-form",
+                            "type": "composite",
+                            "enabled": True,
+                            "logic": "any",
+                            "match": ["*.py"],
+                            "rules": [
+                                {"type": "long-lines", "max_length": 120},
+                                {"type": "placeholder-comments", "patterns": ["placeholder"]},
+                            ],
+                        }
+                    ]
+                }
+            )
+            violations = engine.scan_repository(repo_root)
+
+            flagged_paths = {violation.path for violation in violations}
+            self.assertEqual(flagged_paths, {"both_bad.py"})
+            self.assertTrue(any("failed all of" in violation.message for violation in violations))
+
 
 if __name__ == "__main__":
     unittest.main()

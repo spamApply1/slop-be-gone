@@ -242,6 +242,31 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 "enabled": True,
                 "description": f"Suggested from prompt: {prompt}",
             }
+        elif any(
+            token in prompt_lower
+            for token in (
+                "combine",
+                "composite",
+                "both",
+                "either",
+                "all of",
+                "any of",
+                "scoped",
+                "group of",
+            )
+        ):
+            rule = {
+                "id": "suggested-composite",
+                "type": "composite",
+                "enabled": True,
+                "logic": "any" if ("either" in prompt_lower or "any of" in prompt_lower) else "all",
+                "match": ["src/**/*.py"],
+                "rules": [
+                    {"type": "long-lines", "max_length": 120},
+                    {"type": "placeholder-comments", "patterns": ["placeholder"]},
+                ],
+                "description": f"Suggested from prompt: {prompt}",
+            }
         else:
             rule = {
                 "id": "suggested-placeholder",

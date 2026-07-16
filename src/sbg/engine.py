@@ -47,6 +47,7 @@ class Violation:
 class RuleEngine:
     def __init__(self, manifest: dict[str, Any] | None = None):
         self.manifest = manifest or {"rules": []}
+        self._composite_depth = 0
 
     @classmethod
     def from_manifest_path(cls, path: str | Path | None = None) -> "RuleEngine":
@@ -67,23 +68,27 @@ class RuleEngine:
         rules = [rule for rule in self.manifest.get("rules", []) if rule.get("enabled", True)]
         repo_context = self._build_repo_context(repo_root, file_paths)
 
-        for raw_path in file_paths:
-            if raw_path is None:
+        for rule in rules:
+            if rule.get("type") == "composite":
+                violations.extend(self._apply_composite_rule(rule, repo_root, file_paths))
                 continue
-            candidate = Path(raw_path)
-            if not candidate.is_absolute():
-                candidate = (repo_root / candidate).resolve()
-            else:
-                candidate = candidate.expanduser().resolve()
-            if not candidate.exists() or not candidate.is_file():
-                continue
-            try:
-                relative_path = candidate.relative_to(repo_root).as_posix()
-            except ValueError:
-                relative_path = candidate.as_posix()
-            file_size = candidate.stat().st_size
-            content = self._read_text(candidate)
-            for rule in rules:
+
+            for raw_path in file_paths:
+                if raw_path is None:
+                    continue
+                candidate = Path(raw_path)
+                if not candidate.is_absolute():
+                    candidate = (repo_root / candidate).resolve()
+                else:
+                    candidate = candidate.expanduser().resolve()
+                if not candidate.exists() or not candidate.is_file():
+                    continue
+                try:
+                    relative_path = candidate.relative_to(repo_root).as_posix()
+                except ValueError:
+                    relative_path = candidate.as_posix()
+                file_size = candidate.stat().st_size
+                content = self._read_text(candidate)
                 violations.extend(
                     self._apply_rule(
                         rule,
@@ -160,6 +165,143 @@ class RuleEngine:
                 relative_path = candidate.as_posix()
             context["files"][relative_path] = self._read_text(candidate)
         return context
+
+    def _apply_composite_rule(
+        self,
+        rule: dict[str, Any],
+        repo_root: Path,
+        file_paths: list[str | Path] | tuple[str | Path, ...] | set[str | Path],
+    ) -> list[Violation]:
+        rule_id = rule.get("id", rule.get("type", "composite"))
+        if self._composite_depth > 4:
+            return []
+        child_rules = rule.get("rules")
+        if not isinstance(child_rules, list) or not child_rules:
+            return []
+        logic = str(rule.get("logic", "all")).strip().lower()
+        selectors = self._normalize_selectors(rule.get("match"))
+        scoped_paths = self._select_paths(repo_root, file_paths, selectors)
+        if not scoped_paths:
+            return []
+
+        child_results: list[tuple[str, list[Violation]]] = []
+        for child in child_rules:
+            if not isinstance(child, dict):
+                continue
+            child_engine = RuleEngine({"rules": [{**child, "enabled": True}]})
+            child_engine._composite_depth = self._composite_depth + 1
+            child_violations = child_engine.scan_paths(repo_root, scoped_paths)
+            child_id = str(child.get("id") or child.get("type") or "child")
+            child_results.append((child_id, child_violations))
+
+        if not child_results:
+            return []
+        if logic == "any":
+            return self._combine_any_logic(rule_id, child_results)
+        return self._combine_all_logic(rule_id, child_results)
+
+    def _combine_all_logic(
+        self,
+        rule_id: str,
+        child_results: list[tuple[str, list[Violation]]],
+    ) -> list[Violation]:
+        violations: list[Violation] = []
+        for child_id, child_violations in child_results:
+            for violation in child_violations:
+                violations.append(
+                    Violation(
+                        rule_id=rule_id,
+                        path=violation.path,
+                        line=violation.line,
+                        message=f"[{child_id}] {violation.message}",
+                    )
+                )
+        return violations
+
+    def _combine_any_logic(
+        self,
+        rule_id: str,
+        child_results: list[tuple[str, list[Violation]]],
+    ) -> list[Violation]:
+        flagged_sets = [{violation.path for violation in child_violations} for _, child_violations in child_results]
+        child_ids = [child_id for child_id, _ in child_results]
+        failing = set.intersection(*flagged_sets) if flagged_sets else set()
+        violations: list[Violation] = []
+        for path in sorted(failing):
+            violations.append(
+                Violation(
+                    rule_id=rule_id,
+                    path=path,
+                    line=None,
+                    message=f"no acceptable form satisfied; failed all of: {', '.join(child_ids)}",
+                )
+            )
+        return violations
+
+    def _normalize_selectors(self, match_value: Any) -> list[re.Pattern[str]]:
+        if not match_value:
+            return []
+        if isinstance(match_value, str):
+            globs = [match_value]
+        elif isinstance(match_value, list):
+            globs = [str(item) for item in match_value]
+        else:
+            return []
+        return [self._glob_to_regex(glob) for glob in globs if glob.strip()]
+
+    def _select_paths(
+        self,
+        repo_root: Path,
+        file_paths: list[str | Path] | tuple[str | Path, ...] | set[str | Path],
+        selectors: list[re.Pattern[str]],
+    ) -> list[str | Path]:
+        if not selectors:
+            return list(file_paths)
+        selected: list[str | Path] = []
+        for raw_path in file_paths:
+            if raw_path is None:
+                continue
+            relative_path = self._relative_posix(repo_root, raw_path)
+            if any(selector.match(relative_path) for selector in selectors):
+                selected.append(raw_path)
+        return selected
+
+    def _relative_posix(self, repo_root: Path, raw_path: str | Path) -> str:
+        candidate = Path(raw_path)
+        if not candidate.is_absolute():
+            candidate = (repo_root / candidate).resolve()
+        else:
+            candidate = candidate.expanduser().resolve()
+        try:
+            return candidate.relative_to(repo_root).as_posix()
+        except ValueError:
+            return candidate.as_posix()
+
+    def _glob_to_regex(self, pattern: str) -> re.Pattern[str]:
+        out: list[str] = ["^"]
+        index = 0
+        length = len(pattern)
+        while index < length:
+            char = pattern[index]
+            if char == "*":
+                if index + 1 < length and pattern[index + 1] == "*":
+                    if index + 2 < length and pattern[index + 2] == "/":
+                        out.append("(?:.*/)?")
+                        index += 3
+                        continue
+                    out.append(".*")
+                    index += 2
+                    continue
+                out.append("[^/]*")
+            elif char == "?":
+                out.append("[^/]")
+            elif char in ".()[]{}+^$|\\":
+                out.append("\\" + char)
+            else:
+                out.append(char)
+            index += 1
+        out.append("$")
+        return re.compile("".join(out))
 
     def _apply_rule(
         self,
