@@ -37,7 +37,7 @@ def resolve_default_repo_root() -> Path:
     return REPO_ROOT.resolve()
 
 
-from sbg.engine import RuleEngine
+from sbg.engine import RuleEngine, validate_manifest
 from sbg.manifest import load_concepts, resolve_manifest_path, write_manifest
 from sbg.script_maps import build_script_map
 
@@ -63,6 +63,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
             return
         if path == "/api/manifest-save":
             self._serve_manifest_save()
+            return
+        if path == "/api/manifest-validate":
+            self._serve_manifest_validate()
             return
         if path == "/api/concepts":
             self._serve_concepts()
@@ -173,6 +176,30 @@ class DashboardHandler(BaseHTTPRequestHandler):
         self._send_json({
             "manifest_path": str(manifest_path),
             "manifest": manifest_payload,
+        })
+
+    def _serve_manifest_validate(self) -> None:
+        payload = self._read_json_payload()
+        repo_root = self._resolve_repo_root(payload.get("repo_root"))
+        manifest_payload = payload.get("manifest")
+        if isinstance(manifest_payload, str):
+            try:
+                manifest_payload = json.loads(manifest_payload)
+            except json.JSONDecodeError as exc:
+                self._send_json({"valid": False, "errors": [f"invalid manifest JSON: {exc.msg}"]})
+                return
+        if manifest_payload is None:
+            manifest_path = self._resolve_manifest_path(payload.get("manifest_path"), repo_root=repo_root)
+            try:
+                manifest_payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+            except (FileNotFoundError, json.JSONDecodeError) as exc:
+                self._send_json({"valid": False, "errors": [f"could not load manifest: {exc}"]})
+                return
+        errors = validate_manifest(manifest_payload)
+        self._send_json({
+            "valid": not errors,
+            "errors": errors,
+            "rule_count": len(manifest_payload.get("rules", [])) if isinstance(manifest_payload, dict) else 0,
         })
 
     def _serve_rule_suggest(self) -> None:

@@ -145,6 +145,27 @@ class WebUITests(unittest.TestCase):
             saved_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             self.assertEqual(saved_manifest["rules"][0]["id"], "custom-commandment")
 
+    def test_manifest_validate_endpoint_reports_errors(self) -> None:
+        status, body = self._request(
+            "/api/manifest-validate",
+            method="POST",
+            payload={"manifest": {"rules": [{"id": "one", "type": "secret-scan"}]}},
+        )
+        self.assertEqual(status, 200)
+        response = json.loads(body)
+        self.assertTrue(response["valid"])
+        self.assertEqual(response["errors"], [])
+
+        status, body = self._request(
+            "/api/manifest-validate",
+            method="POST",
+            payload={"manifest": {"rules": [{"id": "bad"}]}},
+        )
+        self.assertEqual(status, 200)
+        response = json.loads(body)
+        self.assertFalse(response["valid"])
+        self.assertTrue(response["errors"])
+
     def test_rule_suggestion_endpoint_suggests_a_rule(self) -> None:
         status, body = self._request(
             "/api/rule-suggest",

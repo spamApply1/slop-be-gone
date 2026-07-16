@@ -694,6 +694,10 @@ function bindActionButton(button) {
       void loadManifest();
       return;
     }
+    if (action === "validate-manifest") {
+      void validateManifest();
+      return;
+    }
     if (action === "suggest-rule") {
       void suggestRule();
       return;
@@ -1114,6 +1118,40 @@ async function saveManifest() {
     setStatus(`Manifest saved to ${response.manifest_path}.`, "success");
   } catch (error) {
     setStatus(`Unable to save manifest: ${error.message}`, "error");
+  }
+}
+
+async function validateManifest() {
+  const repoRoot = repoPathInput.value.trim() || ".";
+  let manifestPayload = null;
+  try {
+    manifestPayload = JSON.parse(manifestEditor.value);
+  } catch (error) {
+    setStatus(`Manifest JSON is invalid: ${error.message}`, "error");
+    return;
+  }
+
+  setStatus("Validating manifest…");
+  try {
+    const response = await requestJson("/api/manifest-validate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ repo_root: repoRoot, manifest: manifestPayload }),
+    });
+    const errors = Array.isArray(response.errors) ? response.errors : [];
+    if (response.valid) {
+      setStatus(`Manifest is valid (${response.rule_count} rule(s)).`, "success");
+    } else {
+      setStatus(`Manifest has ${errors.length} problem(s). Click for details.`, "error");
+    }
+    openExplorerModal("Manifest validation", response, {
+      kind: response.valid ? "valid" : "invalid",
+      summary: response.valid
+        ? `All ${response.rule_count} rule(s) are structurally valid.`
+        : `${errors.length} problem(s) must be fixed before this policy can enforce.`,
+    });
+  } catch (error) {
+    setStatus(`Unable to validate manifest: ${error.message}`, "error");
   }
 }
 

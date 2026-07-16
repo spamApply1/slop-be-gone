@@ -46,6 +46,12 @@
               class="secondary"
               data-action="refresh-manifest"
             >Refresh manifest</button>
+            <button
+              type="button"
+              id="validate-manifest"
+              class="secondary"
+              data-action="validate-manifest"
+            >Validate manifest</button>
           </div>
         </form>
 
@@ -80,6 +86,9 @@
                 <option value="long-lines">long-lines</option>
                 <option value="empty-files">empty-files</option>
                 <option value="file-size">file-size</option>
+                <option value="merge-conflict-markers">merge-conflict-markers</option>
+                <option value="secret-scan">secret-scan</option>
+                <option value="debug-artifacts">debug-artifacts</option>
               </select>
             </label>
             <label class="select-field" for="pattern-type">
