@@ -214,6 +214,51 @@
       "pattern_text": "",
       "pattern_type": "plain_text",
       "examples": ["A source file whose last line has no trailing newline."]
+    },
+    {
+      "id": "python-bare-except",
+      "title": "Python: bare except",
+      "category": "correctness",
+      "description": "Freeze the AST rule that blocks bare 'except:' clauses in Python.",
+      "rule_kind": "python-bare-except",
+      "pattern_name": "python-bare-except",
+      "pattern_text": "",
+      "pattern_type": "plain_text",
+      "examples": ["An except clause with no exception type that swallows every error."]
+    },
+    {
+      "id": "python-mutable-default",
+      "title": "Python: mutable default arg",
+      "category": "correctness",
+      "description": "Freeze the AST rule that blocks mutable default arguments in Python functions.",
+      "rule_kind": "python-mutable-default",
+      "pattern_name": "python-mutable-default",
+      "pattern_text": "",
+      "pattern_type": "plain_text",
+      "examples": ["A function defined with a list, dict, or set default argument shared across calls."]
+    },
+    {
+      "id": "python-eval-exec",
+      "title": "Python: eval/exec",
+      "category": "security",
+      "description": "Freeze the AST rule that blocks eval() and exec() calls in Python.",
+      "rule_kind": "python-eval-exec",
+      "pattern_name": "python-eval-exec",
+      "pattern_text": "",
+      "pattern_type": "plain_text",
+      "examples": ["A call to eval() or exec() that dynamically executes a string."]
+    },
+    {
+      "id": "python-function-length",
+      "title": "Python: function length",
+      "category": "complexity",
+      "description": "Surface the AST rule that warns when a Python function grows longer than the configured limit.",
+      "rule_kind": "python-function-length",
+      "pattern_name": "python-function-length",
+      "pattern_text": "",
+      "pattern_type": "plain_text",
+      "max_lines": 60,
+      "examples": ["A function whose body spans more lines than the maintainability threshold."]
     }
   ]
 }

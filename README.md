@@ -19,6 +19,9 @@ self-hygiene manifest and a pre-commit hook loop.
   oversized files, UI/design integrity, unresolved merge-conflict markers,
   committed secrets, leftover debug artifacts, trailing whitespace, and missing
   final newlines
+- Ships AST-based Python static analysis (parses real syntax trees, not text):
+  syntax errors, bare/broad `except`, mutable default arguments, `eval`/`exec`,
+  and configurable function-length / argument-count / nesting-depth checks
 - Lets any rule be scoped to specific paths with per-rule `include`/`exclude`
   globs, and lets you compose several checks into one idea with `composite`
 - Supports per-rule `severity` (`error` or `warning`) for gradual rollout, with
@@ -146,8 +149,10 @@ default rule set.
 ## Project layout
 
 - `src/sbg/engine.py` contains the rule engine and violation model
+- `src/sbg/ast_analysis.py` contains the AST-based Python analyzers
 - `src/sbg/manifest.py` loads the JSON manifest
 - `src/sbg/cli.py` provides the CLI entry point
+- `src/sbg/data/` holds the bundled default manifest, concepts, and rule guide
 - `sbg_manifest.json` holds the default rules
 - `tests/` contains fixture-based and CLI tests
 

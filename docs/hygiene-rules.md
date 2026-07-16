@@ -472,6 +472,46 @@ Why it matters:
 How to fix:
 - Add a single trailing newline at the end of the file.
 
+## Python static analysis (AST rules)
+
+These rules parse each `.py` file into an abstract syntax tree, so they reason
+about real program structure instead of text. That makes them precise: a snippet
+that merely appears inside a string or comment is never flagged. Non-Python
+files are skipped, and a file that cannot be parsed is reported by
+`python-syntax` rather than crashing the scan.
+
+Correctness and security (shipped as blocking errors):
+
+- **python-syntax** — the file must parse; a `SyntaxError` is reported with its
+  line and message.
+- **python-bare-except** — flags `except:` with no exception type, which
+  swallows every error (including `KeyboardInterrupt`).
+- **python-broad-except** — flags `except Exception` / `except BaseException`;
+  catch the specific errors you expect. Configurable via `names`.
+- **python-mutable-default** — flags list/dict/set default arguments, which are
+  created once and shared across calls.
+- **python-eval-exec** — flags `eval()`/`exec()` calls as code-injection risks.
+  Configurable via `names`.
+
+Complexity and maintainability (shipped as advisory warnings you can promote to
+errors with `severity`):
+
+- **python-function-args** — functions with more than `max_args` parameters
+  (default 6; `self`/`cls` excluded).
+- **python-function-length** — functions longer than `max_lines` (default 60).
+- **python-nesting-depth** — control flow nested deeper than `max_depth`
+  (default 4) inside a function.
+
+```json
+{
+  "id": "python-function-length",
+  "type": "python-function-length",
+  "severity": "warning",
+  "max_lines": 60,
+  "include": ["src/**/*.py"]
+}
+```
+
 ## How to use this guide
 
 Use these rules as a quick reference when a check fails. If a violation appears,

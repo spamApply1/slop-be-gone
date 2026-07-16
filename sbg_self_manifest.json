@@ -326,6 +326,180 @@
           "kind": "manifest"
         }
       ]
+    },
+    {
+      "id": "self-python-syntax",
+      "type": "python-syntax",
+      "enabled": true,
+      "description": "Freeze Python files that fail to parse.",
+      "what": "Reject any .py file that raises a SyntaxError when parsed.",
+      "why": "A file that does not parse is broken and cannot run; catching it at commit time prevents shipping dead code.",
+      "source_refs": [
+        {
+          "label": "Rule guide",
+          "path": "docs/hygiene-rules.md",
+          "kind": "doc",
+          "anchor": "python-syntax"
+        },
+        {
+          "label": "Rule source",
+          "path": "sbg_self_manifest.json",
+          "kind": "manifest"
+        }
+      ]
+    },
+    {
+      "id": "self-python-bare-except",
+      "type": "python-bare-except",
+      "enabled": true,
+      "description": "Freeze bare 'except:' clauses in Python.",
+      "what": "Reject except handlers that do not name an exception type.",
+      "why": "Bare excepts swallow every error including KeyboardInterrupt and SystemExit, hiding real failures.",
+      "source_refs": [
+        {
+          "label": "Rule guide",
+          "path": "docs/hygiene-rules.md",
+          "kind": "doc",
+          "anchor": "python-bare-except"
+        },
+        {
+          "label": "Rule source",
+          "path": "sbg_self_manifest.json",
+          "kind": "manifest"
+        }
+      ]
+    },
+    {
+      "id": "self-python-broad-except",
+      "type": "python-broad-except",
+      "enabled": true,
+      "description": "Freeze overly broad exception handlers in Python.",
+      "what": "Flag 'except Exception' and 'except BaseException' handlers.",
+      "why": "Catching the broadest exceptions masks bugs and makes failures hard to diagnose; catch specific errors instead.",
+      "source_refs": [
+        {
+          "label": "Rule guide",
+          "path": "docs/hygiene-rules.md",
+          "kind": "doc",
+          "anchor": "python-broad-except"
+        },
+        {
+          "label": "Rule source",
+          "path": "sbg_self_manifest.json",
+          "kind": "manifest"
+        }
+      ]
+    },
+    {
+      "id": "self-python-mutable-default",
+      "type": "python-mutable-default",
+      "enabled": true,
+      "description": "Freeze mutable default arguments in Python functions.",
+      "what": "Flag function defaults that are a list, dict, or set literal or constructor.",
+      "why": "Mutable defaults are created once and shared across calls, a classic source of state-leak bugs.",
+      "source_refs": [
+        {
+          "label": "Rule guide",
+          "path": "docs/hygiene-rules.md",
+          "kind": "doc",
+          "anchor": "python-mutable-default"
+        },
+        {
+          "label": "Rule source",
+          "path": "sbg_self_manifest.json",
+          "kind": "manifest"
+        }
+      ]
+    },
+    {
+      "id": "self-python-eval-exec",
+      "type": "python-eval-exec",
+      "enabled": true,
+      "description": "Freeze use of eval and exec in Python.",
+      "what": "Flag calls to eval() or exec().",
+      "why": "Dynamic execution of strings is a code-injection risk and almost always avoidable.",
+      "source_refs": [
+        {
+          "label": "Rule guide",
+          "path": "docs/hygiene-rules.md",
+          "kind": "doc",
+          "anchor": "python-eval-exec"
+        },
+        {
+          "label": "Rule source",
+          "path": "sbg_self_manifest.json",
+          "kind": "manifest"
+        }
+      ]
+    },
+    {
+      "id": "self-python-function-args",
+      "type": "python-function-args",
+      "enabled": true,
+      "severity": "warning",
+      "max_args": 6,
+      "description": "Surface Python functions that take too many parameters.",
+      "what": "Warn when a function or method exceeds the configured parameter count (self/cls excluded).",
+      "why": "Long parameter lists signal a function doing too much and are hard to call correctly.",
+      "source_refs": [
+        {
+          "label": "Rule guide",
+          "path": "docs/hygiene-rules.md",
+          "kind": "doc",
+          "anchor": "python-function-args"
+        },
+        {
+          "label": "Rule source",
+          "path": "sbg_self_manifest.json",
+          "kind": "manifest"
+        }
+      ]
+    },
+    {
+      "id": "self-python-function-length",
+      "type": "python-function-length",
+      "enabled": true,
+      "severity": "warning",
+      "max_lines": 60,
+      "description": "Surface overly long Python functions.",
+      "what": "Warn when a function body exceeds the configured line count.",
+      "why": "Long functions are harder to test and review; they usually hide several responsibilities.",
+      "source_refs": [
+        {
+          "label": "Rule guide",
+          "path": "docs/hygiene-rules.md",
+          "kind": "doc",
+          "anchor": "python-function-length"
+        },
+        {
+          "label": "Rule source",
+          "path": "sbg_self_manifest.json",
+          "kind": "manifest"
+        }
+      ]
+    },
+    {
+      "id": "self-python-nesting-depth",
+      "type": "python-nesting-depth",
+      "enabled": true,
+      "severity": "warning",
+      "max_depth": 4,
+      "description": "Surface deeply nested Python control flow.",
+      "what": "Warn when control-flow blocks nest deeper than the configured depth inside a function.",
+      "why": "Deep nesting increases cyclomatic complexity and makes logic hard to follow; prefer early returns and helpers.",
+      "source_refs": [
+        {
+          "label": "Rule guide",
+          "path": "docs/hygiene-rules.md",
+          "kind": "doc",
+          "anchor": "python-nesting-depth"
+        },
+        {
+          "label": "Rule source",
+          "path": "sbg_self_manifest.json",
+          "kind": "manifest"
+        }
+      ]
     }
   ]
 }

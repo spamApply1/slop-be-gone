@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .manifest import load_manifest
+from .ast_analysis import AST_ANALYZERS, parse_module
 
 
 IGNORED_DIRS = {
@@ -42,6 +43,14 @@ KNOWN_RULE_TYPES = {
     "debug-artifacts",
     "trailing-whitespace",
     "final-newline",
+    "python-syntax",
+    "python-bare-except",
+    "python-broad-except",
+    "python-mutable-default",
+    "python-eval-exec",
+    "python-function-args",
+    "python-function-length",
+    "python-nesting-depth",
     "composite",
 }
 
@@ -656,7 +665,66 @@ class RuleEngine:
             return self._apply_trailing_whitespace(rule, relative_path, content, rule_id)
         if rule_type == "final-newline":
             return self._apply_final_newline(rule, relative_path, content, rule_id)
+        if rule_type == "python-syntax":
+            return self._apply_python_syntax(rule, relative_path, content, rule_id, repo_context)
+        if rule_type in AST_ANALYZERS:
+            return self._apply_ast_rule(rule, relative_path, content, rule_id, repo_context, rule_type)
         return []
+
+    def _python_ast(
+        self,
+        relative_path: str,
+        content: str | None,
+        repo_context: dict[str, Any] | None,
+    ) -> Any:
+        if content is None or not relative_path.endswith(".py"):
+            return None
+        cache = repo_context.setdefault("ast_cache", {}) if repo_context is not None else {}
+        if relative_path in cache:
+            return cache[relative_path]
+        tree, _ = parse_module(content)
+        cache[relative_path] = tree
+        return tree
+
+    def _apply_ast_rule(
+        self,
+        rule: dict[str, Any],
+        relative_path: str,
+        content: str | None,
+        rule_id: str,
+        repo_context: dict[str, Any] | None,
+        rule_type: str,
+    ) -> list[Violation]:
+        if content is None or not relative_path.endswith(".py"):
+            return []
+        tree = self._python_ast(relative_path, content, repo_context)
+        if tree is None:
+            return []
+        analyzer = AST_ANALYZERS[rule_type]
+        findings = analyzer(rule, tree, relative_path)
+        return [
+            Violation(rule_id=rule_id, path=relative_path, line=line, message=message)
+            for line, message in findings
+        ]
+
+    def _apply_python_syntax(
+        self,
+        rule: dict[str, Any],
+        relative_path: str,
+        content: str | None,
+        rule_id: str,
+        repo_context: dict[str, Any] | None,
+    ) -> list[Violation]:
+        del rule
+        if content is None or not relative_path.endswith(".py"):
+            return []
+        tree, error = parse_module(content)
+        if repo_context is not None:
+            repo_context.setdefault("ast_cache", {})[relative_path] = tree
+        if error is None:
+            return []
+        message = f"Python syntax error: {error.msg}"
+        return [Violation(rule_id=rule_id, path=relative_path, line=error.lineno, message=message)]
 
     def _apply_trailing_whitespace(
         self,
