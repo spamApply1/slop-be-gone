@@ -1,0 +1,5 @@
+# SBG should not scan generated build or packaging artifacts.
+**/*.egg-info/
+build/
+dist/
+.eggs/

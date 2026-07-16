@@ -325,6 +325,28 @@ class RuleEngineTests(unittest.TestCase):
             self.assertIn("(warning)", violations[0].format())
             self.assertEqual(violations[0].as_dict()["severity"], "warning")
 
+    def test_trailing_whitespace_and_final_newline_rules(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = Path(temp_dir)
+            (repo_root / "spacey.py").write_text("value = 1   \nok = 2\n", encoding="utf-8")
+            (repo_root / "nonl.py").write_text("no_newline = 1", encoding="utf-8")
+            (repo_root / "clean.py").write_text("clean = 1\n", encoding="utf-8")
+            engine = RuleEngine(
+                {
+                    "rules": [
+                        {"id": "trailing-whitespace", "type": "trailing-whitespace", "enabled": True},
+                        {"id": "final-newline", "type": "final-newline", "enabled": True},
+                    ]
+                }
+            )
+            violations = engine.scan_repository(repo_root)
+
+            by_rule = {(violation.rule_id, violation.path) for violation in violations}
+            self.assertIn(("trailing-whitespace", "spacey.py"), by_rule)
+            self.assertIn(("final-newline", "nonl.py"), by_rule)
+            self.assertNotIn(("trailing-whitespace", "clean.py"), by_rule)
+            self.assertNotIn(("final-newline", "clean.py"), by_rule)
+
     def test_sbgignore_excludes_matching_paths(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = Path(temp_dir)

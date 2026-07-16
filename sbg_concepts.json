@@ -192,6 +192,28 @@
       "pattern_text": "",
       "pattern_type": "plain_text",
       "examples": ["A console.log or debugger statement, or a breakpoint()/pdb.set_trace() call left in source."]
+    },
+    {
+      "id": "trailing-whitespace",
+      "title": "Trailing whitespace",
+      "category": "readability",
+      "description": "Freeze the formatting rule that blocks stray trailing spaces and tabs.",
+      "rule_kind": "trailing-whitespace",
+      "pattern_name": "trailing-whitespace",
+      "pattern_text": "",
+      "pattern_type": "plain_text",
+      "examples": ["A line that ends with one or more spaces or tabs."]
+    },
+    {
+      "id": "final-newline",
+      "title": "Final newline",
+      "category": "readability",
+      "description": "Freeze the formatting rule that requires non-empty files to end with a newline.",
+      "rule_kind": "final-newline",
+      "pattern_name": "final-newline",
+      "pattern_text": "",
+      "pattern_type": "plain_text",
+      "examples": ["A source file whose last line has no trailing newline."]
     }
   ]
 }

@@ -325,6 +325,48 @@
           "kind": "manifest"
         }
       ]
+    },
+    {
+      "id": "trailing-whitespace",
+      "type": "trailing-whitespace",
+      "enabled": true,
+      "description": "Freeze trailing whitespace so diffs stay clean and noise-free.",
+      "what": "Reject lines that end with stray spaces or tabs.",
+      "why": "Trailing whitespace creates noisy diffs, inconsistent formatting, and accidental churn that distracts from real review.",
+      "source_refs": [
+        {
+          "label": "Rule guide",
+          "path": "docs/hygiene-rules.md",
+          "kind": "doc",
+          "anchor": "trailing-whitespace"
+        },
+        {
+          "label": "Rule source",
+          "path": "sbg_manifest.json",
+          "kind": "manifest"
+        }
+      ]
+    },
+    {
+      "id": "final-newline",
+      "type": "final-newline",
+      "enabled": true,
+      "description": "Freeze files that do not end with a newline so tooling and diffs behave predictably.",
+      "what": "Reject non-empty files whose final line is not terminated with a newline.",
+      "why": "A missing final newline produces noisy 'no newline at end of file' diffs and breaks some POSIX tools that expect newline-terminated text.",
+      "source_refs": [
+        {
+          "label": "Rule guide",
+          "path": "docs/hygiene-rules.md",
+          "kind": "doc",
+          "anchor": "final-newline"
+        },
+        {
+          "label": "Rule source",
+          "path": "sbg_manifest.json",
+          "kind": "manifest"
+        }
+      ]
     }
   ]
 }

@@ -40,6 +40,8 @@ KNOWN_RULE_TYPES = {
     "merge-conflict-markers",
     "secret-scan",
     "debug-artifacts",
+    "trailing-whitespace",
+    "final-newline",
     "composite",
 }
 
@@ -567,7 +569,55 @@ class RuleEngine:
             return self._apply_secret_scan(rule, relative_path, content, rule_id)
         if rule_type == "debug-artifacts":
             return self._apply_debug_artifacts(rule, relative_path, content, rule_id)
+        if rule_type == "trailing-whitespace":
+            return self._apply_trailing_whitespace(rule, relative_path, content, rule_id)
+        if rule_type == "final-newline":
+            return self._apply_final_newline(rule, relative_path, content, rule_id)
         return []
+
+    def _apply_trailing_whitespace(
+        self,
+        rule: dict[str, Any],
+        relative_path: str,
+        content: str | None,
+        rule_id: str,
+    ) -> list[Violation]:
+        del rule
+        if content is None:
+            return []
+        violations: list[Violation] = []
+        for line_number, line in enumerate(content.splitlines(), start=1):
+            if line != line.rstrip(" \t"):
+                violations.append(
+                    Violation(
+                        rule_id=rule_id,
+                        path=relative_path,
+                        line=line_number,
+                        message="trailing whitespace found",
+                    )
+                )
+        return violations
+
+    def _apply_final_newline(
+        self,
+        rule: dict[str, Any],
+        relative_path: str,
+        content: str | None,
+        rule_id: str,
+    ) -> list[Violation]:
+        del rule
+        if not content:
+            return []
+        if content.endswith("\n"):
+            return []
+        return [
+            Violation(
+                rule_id=rule_id,
+                path=relative_path,
+                line=len(content.splitlines()) or 1,
+                message="file does not end with a newline",
+            )
+        ]
 
     def _apply_merge_conflict_markers(
         self,

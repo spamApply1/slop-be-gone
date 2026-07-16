@@ -448,6 +448,30 @@ This lets you keep a broad rule from firing on generated or vendored trees:
 }
 ```
 
+## 17. trailing-whitespace
+
+What it catches:
+- Lines that end with stray spaces or tabs.
+
+Why it matters:
+- Trailing whitespace creates noisy diffs and inconsistent formatting, and it is
+  a classic low-value artifact that distracts reviewers from real changes.
+
+How to fix:
+- Strip the trailing spaces or tabs. Most editors can do this on save.
+
+## 18. final-newline
+
+What it catches:
+- Non-empty files whose last line is not terminated with a newline.
+
+Why it matters:
+- A missing final newline produces the noisy "No newline at end of file" marker
+  in diffs and breaks some POSIX tools that expect newline-terminated text.
+
+How to fix:
+- Add a single trailing newline at the end of the file.
+
 ## How to use this guide
 
 Use these rules as a quick reference when a check fails. If a violation appears,

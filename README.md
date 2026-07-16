@@ -17,7 +17,8 @@ self-hygiene manifest and a pre-commit hook loop.
 - Prints clear violations and exits non-zero when damage is detected
 - Ships rules for placeholder comments, marker spam, empty files, long lines,
   oversized files, UI/design integrity, unresolved merge-conflict markers,
-  committed secrets, and leftover debug artifacts
+  committed secrets, leftover debug artifacts, trailing whitespace, and missing
+  final newlines
 - Lets any rule be scoped to specific paths with per-rule `include`/`exclude`
   globs, and lets you compose several checks into one idea with `composite`
 - Supports per-rule `severity` (`error` or `warning`) for gradual rollout, with

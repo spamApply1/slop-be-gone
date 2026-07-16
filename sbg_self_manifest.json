@@ -284,6 +284,48 @@
           "kind": "manifest"
         }
       ]
+    },
+    {
+      "id": "self-trailing-whitespace",
+      "type": "trailing-whitespace",
+      "enabled": true,
+      "description": "Freeze trailing whitespace inside the SBG repository itself.",
+      "what": "Require SBG's own files to be free of stray trailing spaces and tabs.",
+      "why": "The framework should keep its own diffs clean so its self-hygiene stays credible.",
+      "source_refs": [
+        {
+          "label": "Rule guide",
+          "path": "docs/hygiene-rules.md",
+          "kind": "doc",
+          "anchor": "trailing-whitespace"
+        },
+        {
+          "label": "Rule source",
+          "path": "sbg_self_manifest.json",
+          "kind": "manifest"
+        }
+      ]
+    },
+    {
+      "id": "self-final-newline",
+      "type": "final-newline",
+      "enabled": true,
+      "description": "Freeze missing final newlines inside the SBG repository itself.",
+      "what": "Require SBG's own non-empty files to end with a newline.",
+      "why": "A hygiene framework should model newline-terminated files so its own diffs and tooling stay predictable.",
+      "source_refs": [
+        {
+          "label": "Rule guide",
+          "path": "docs/hygiene-rules.md",
+          "kind": "doc",
+          "anchor": "final-newline"
+        },
+        {
+          "label": "Rule source",
+          "path": "sbg_self_manifest.json",
+          "kind": "manifest"
+        }
+      ]
     }
   ]
 }

@@ -331,6 +331,8 @@ def suggestion_for_rule(rule_id: str) -> str:
         "merge-conflict-markers": "Resolve the git conflict and remove all conflict markers before committing.",
         "secret-scan": "Remove the credential, rotate it, and load it from the environment instead.",
         "debug-artifacts": "Remove debugger/console/breakpoint statements left over from debugging.",
+        "trailing-whitespace": "Strip trailing spaces and tabs from the flagged lines.",
+        "final-newline": "Add a single trailing newline at the end of the file.",
     }
     return suggestions.get(rule_id, "Review these findings and fix the underlying issue before committing.")
 
