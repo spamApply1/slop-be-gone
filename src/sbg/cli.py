@@ -62,6 +62,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="repository root whose manifest should be validated",
     )
     validate_parser.add_argument("--manifest", dest="manifest", default=None, help="path to a custom manifest")
+
+    init_parser = subparsers.add_parser("init")
+    init_parser.add_argument(
+        "repo_root",
+        nargs="?",
+        default=".",
+        help="repository root to scaffold an SBG manifest into",
+    )
+    init_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="overwrite an existing sbg_manifest.json",
+    )
     return parser
 
 
@@ -79,6 +92,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_script_map(args)
     if args.command == "validate":
         return run_validate(args)
+    if args.command == "init":
+        return run_init(args)
 
     parser.error("unsupported command")
 
@@ -252,6 +267,43 @@ def run_validate(args: argparse.Namespace) -> int:
         return 1
     rule_count = len(manifest.get("rules", []))
     print(f"Manifest {manifest_path} is valid ({rule_count} rule(s)).")
+    return 0
+
+
+def run_init(args: argparse.Namespace) -> int:
+    repo_root = Path(args.repo_root).expanduser().resolve()
+    bundled_manifest = resolve_manifest_path(None)
+    bundled_root = bundled_manifest.parent
+    target_manifest = repo_root / "sbg_manifest.json"
+
+    if target_manifest.exists() and not args.force:
+        print(
+            f"Refusing to overwrite existing {target_manifest}; pass --force to replace it.",
+            file=sys.stderr,
+        )
+        return 1
+
+    try:
+        manifest_text = bundled_manifest.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        print(f"Bundled manifest not found at {bundled_manifest}", file=sys.stderr)
+        return 1
+
+    repo_root.mkdir(parents=True, exist_ok=True)
+    target_manifest.write_text(manifest_text, encoding="utf-8")
+    written = [target_manifest]
+
+    bundled_docs = bundled_root / "docs" / "hygiene-rules.md"
+    if bundled_docs.is_file():
+        target_docs = repo_root / "docs" / "hygiene-rules.md"
+        if not target_docs.exists() or args.force:
+            target_docs.parent.mkdir(parents=True, exist_ok=True)
+            target_docs.write_text(bundled_docs.read_text(encoding="utf-8"), encoding="utf-8")
+            written.append(target_docs)
+
+    for path in written:
+        print(f"Wrote {path}")
+    print("Next: run './sbg install-hooks .' then './sbg check .' to enforce hygiene.")
     return 0
 
 

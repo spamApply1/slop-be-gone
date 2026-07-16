@@ -171,5 +171,40 @@ class CLITests(unittest.TestCase):
             self.assertIn("problem", stdout.getvalue())
 
 
+    def test_init_scaffolds_manifest_and_docs_that_pass_validation(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_path = Path(temp_dir)
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                exit_code = main(["init", str(repo_path)])
+            self.assertEqual(exit_code, 0)
+
+            manifest_path = repo_path / "sbg_manifest.json"
+            docs_path = repo_path / "docs" / "hygiene-rules.md"
+            self.assertTrue(manifest_path.exists())
+            self.assertTrue(docs_path.exists())
+
+            # The scaffolded manifest must validate and the scaffolded repo must be clean.
+            validate_out = io.StringIO()
+            with contextlib.redirect_stdout(validate_out):
+                validate_code = main(["validate", str(repo_path)])
+            self.assertEqual(validate_code, 0)
+
+            check_out = io.StringIO()
+            with contextlib.redirect_stdout(check_out):
+                check_code = main(["check", str(repo_path)])
+            self.assertEqual(check_code, 0)
+
+    def test_init_refuses_to_overwrite_without_force(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_path = Path(temp_dir)
+            (repo_path / "sbg_manifest.json").write_text('{"rules": []}', encoding="utf-8")
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                exit_code = main(["init", str(repo_path)])
+            self.assertEqual(exit_code, 1)
+            self.assertIn("Refusing to overwrite", stderr.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()

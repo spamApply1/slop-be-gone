@@ -40,6 +40,13 @@ python3 -m pip install -e .
 ./sbg check .
 ```
 
+To scaffold SBG into a repository that does not have it yet (writes a default
+`sbg_manifest.json` and the human-readable `docs/hygiene-rules.md` guide):
+
+```bash
+./sbg init /path/to/target-repo
+```
+
 For automation-friendly output:
 
 ```bash
