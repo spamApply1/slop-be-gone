@@ -281,6 +281,34 @@ class RuleEngineTests(unittest.TestCase):
         self.assertTrue(any("non-empty 'rules'" in problem for problem in problems))
         self.assertTrue(any("'logic'" in problem for problem in problems))
 
+    def test_per_rule_include_and_exclude_scope_matching(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = Path(temp_dir)
+            (repo_root / "src").mkdir()
+            (repo_root / "generated").mkdir()
+            (repo_root / "src" / "app.py").write_text(("z" * 200) + "\n", encoding="utf-8")
+            (repo_root / "generated" / "big.py").write_text(("z" * 200) + "\n", encoding="utf-8")
+
+            # include limits the rule to src/**, exclude drops the generated tree.
+            engine = RuleEngine(
+                {
+                    "rules": [
+                        {
+                            "id": "long-lines",
+                            "type": "long-lines",
+                            "enabled": True,
+                            "max_length": 120,
+                            "include": ["src/**/*.py"],
+                            "exclude": ["**/generated/**"],
+                        }
+                    ]
+                }
+            )
+            violations = engine.scan_repository(repo_root)
+
+            flagged_paths = {violation.path for violation in violations}
+            self.assertEqual(flagged_paths, {"src/app.py"})
+
 
 if __name__ == "__main__":
     unittest.main()

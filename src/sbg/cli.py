@@ -95,7 +95,23 @@ def resolve_scan_manifest(manifest: str | Path | None, repo_root: Path) -> Path:
 def run_check(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
     repo_root = Path(args.repo_root).expanduser().resolve()
     manifest_path = resolve_scan_manifest(args.manifest, repo_root)
-    engine = RuleEngine.from_manifest_path(manifest_path)
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        print(f"Manifest not found: {manifest_path}", file=sys.stderr)
+        return 1
+    except json.JSONDecodeError as exc:
+        print(f"Manifest is not valid JSON ({manifest_path}): {exc.msg}", file=sys.stderr)
+        return 1
+
+    manifest_errors = validate_manifest(manifest)
+    if manifest_errors:
+        print(f"Manifest {manifest_path} is invalid; refusing to scan with broken policy:", file=sys.stderr)
+        for error in manifest_errors:
+            print(f"  - {error}", file=sys.stderr)
+        return 1
+
+    engine = RuleEngine(manifest)
     if args.staged:
         violations = engine.scan_staged_files(repo_root)
     else:

@@ -15,6 +15,13 @@ self-hygiene manifest and a pre-commit hook loop.
 
 - Scans a repository with a default manifest in `sbg_manifest.json`
 - Prints clear violations and exits non-zero when damage is detected
+- Ships rules for placeholder comments, marker spam, empty files, long lines,
+  oversized files, UI/design integrity, unresolved merge-conflict markers,
+  committed secrets, and leftover debug artifacts
+- Lets any rule be scoped to specific paths with per-rule `include`/`exclude`
+  globs, and lets you compose several checks into one idea with `composite`
+- Validates a manifest with `sbg validate`, and refuses to scan with broken
+  policy (a `check` run fails fast if the manifest is malformed)
 - Supports staged-file checks with `sbg check --staged`
 - Installs a pre-commit hook with `sbg install-hooks`
 - Supports one-command installer scripts for other repositories
@@ -24,6 +31,7 @@ self-hygiene manifest and a pre-commit hook loop.
 - Can generate repeatable script/bridge maps with `sbg script-map` so UI
   relationships and handler wiring stay inspectable
 - Keeps the rule set easy to review, test, and extend
+
 
 ## Quick start
 
@@ -43,6 +51,12 @@ To enforce hygiene on staged changes before a commit:
 ```bash
 ./sbg install-hooks
 ./sbg check --staged .
+```
+
+To validate the active manifest without scanning files:
+
+```bash
+./sbg validate .
 ```
 
 To get a grouped summary with suggestions:

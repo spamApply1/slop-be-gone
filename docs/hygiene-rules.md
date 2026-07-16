@@ -383,6 +383,29 @@ How to fix:
 - Remove the debugging statement, or replace it with an intentional, configured
   logging call that belongs in the codebase.
 
+## Scoping any rule with include / exclude
+
+Every rule (not just `composite`) accepts optional `include` and `exclude`
+fields. Each is a glob or list of globs matched against a file's repo-relative
+POSIX path, supporting `*`, `?`, and `**`.
+
+- `include`: when present, the rule only applies to files matching at least one
+  glob.
+- `exclude`: files matching any glob are skipped, even if they matched
+  `include`.
+
+This lets you keep a broad rule from firing on generated or vendored trees:
+
+```json
+{
+  "id": "long-lines",
+  "type": "long-lines",
+  "max_length": 120,
+  "include": ["src/**/*.py"],
+  "exclude": ["**/generated/**", "**/vendor/**"]
+}
+```
+
 ## How to use this guide
 
 Use these rules as a quick reference when a check fails. If a violation appears,

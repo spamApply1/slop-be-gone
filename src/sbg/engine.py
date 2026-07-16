@@ -146,6 +146,8 @@ class RuleEngine:
                 violations.extend(self._apply_composite_rule(rule, repo_root, file_paths))
                 continue
 
+            include_selectors = self._normalize_selectors(rule.get("include"))
+            exclude_selectors = self._normalize_selectors(rule.get("exclude"))
             for raw_path in file_paths:
                 if raw_path is None:
                     continue
@@ -160,6 +162,10 @@ class RuleEngine:
                     relative_path = candidate.relative_to(repo_root).as_posix()
                 except ValueError:
                     relative_path = candidate.as_posix()
+                if include_selectors and not any(selector.match(relative_path) for selector in include_selectors):
+                    continue
+                if exclude_selectors and any(selector.match(relative_path) for selector in exclude_selectors):
+                    continue
                 file_size = candidate.stat().st_size
                 if relative_path in repo_context["files"]:
                     content = repo_context["files"][relative_path]
