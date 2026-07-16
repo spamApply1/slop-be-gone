@@ -20,6 +20,7 @@ self-hygiene manifest and a pre-commit hook loop.
 - Supports one-command installer scripts for other repositories
 - Produces a human-readable report with `sbg report`
 - Supports JSON output for automation and CI
+- Ships with a lightweight local web dashboard in `web/` for scanning repositories and reviewing findings
 - Keeps the rule set easy to review, test, and extend
 
 ## Quick start
@@ -47,6 +48,16 @@ To get a grouped summary with suggestions:
 ```bash
 ./sbg report .
 ```
+
+To launch the local dashboard, run:
+
+```bash
+python3 web/server.py
+```
+
+Then open `http://127.0.0.1:8000/` in your browser. The page also works
+when opened directly from the filesystem as long as the local server is
+running.
 
 ## Self-policing workflow
 

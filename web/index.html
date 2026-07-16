@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SBG Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Slop Be Gone</p>
+          <h1>Local repository hygiene dashboard</h1>
+          <p class="subtitle">
+            Scan any repository path, inspect violations in a readable UI, and
+            optionally review the active manifest and a brief summary.
+          </p>
+        </div>
+      </header>
+
+      <section class="panel controls-panel">
+        <form id="scan-form" class="scan-form">
+          <label for="repo-path">Repository path</label>
+          <input id="repo-path" name="repo-path" type="text" value="." placeholder="e.g. . or /path/to/repo">
+
+          <label for="manifest-path">Manifest path (optional)</label>
+          <input id="manifest-path" name="manifest-path" type="text" placeholder="leave blank for the default manifest">
+
+          <div class="checkbox-row">
+            <label class="checkbox-pill">
+              <input id="show-summary" type="checkbox" checked>
+              <span>Show summary</span>
+            </label>
+            <label class="checkbox-pill">
+              <input id="show-manifest" type="checkbox">
+              <span>Show current manifest</span>
+            </label>
+          </div>
+
+          <div class="button-row">
+            <button type="submit">Scan repository</button>
+            <button type="button" id="refresh-manifest" class="secondary">Refresh manifest</button>
+          </div>
+        </form>
+
+        <div id="status" class="status">Ready to scan.</div>
+      </section>
+
+      <section class="panels-grid">
+        <section id="summary-panel" class="panel hidden">
+          <div class="panel-header">
+            <h2>Summary</h2>
+          </div>
+          <div id="summary-list" class="summary-list"></div>
+        </section>
+
+        <section id="manifest-panel" class="panel hidden">
+          <div class="panel-header">
+            <h2>Current manifest</h2>
+          </div>
+          <pre id="manifest-output" class="code-block">{}</pre>
+        </section>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Violations</h2>
+          <span id="violations-count" class="count-pill">0 findings</span>
+        </div>
+        <div id="violations-list" class="violations-list"></div>
+      </section>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
