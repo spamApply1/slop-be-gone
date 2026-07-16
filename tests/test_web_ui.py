@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sys
+import tempfile
 import threading
 import unittest
 from pathlib import Path
@@ -71,6 +72,68 @@ class WebUITests(unittest.TestCase):
         response = json.loads(body)
         self.assertGreater(response["violation_count"], 0)
         self.assertIn("placeholder-comments", response["summary"]["by_rule"])
+
+    def test_violation_context_endpoint_returns_surrounding_lines(self) -> None:
+        fixture_repo = ROOT / "tests" / "fixtures" / "fixture_repo"
+        status, body = self._request(
+            "/api/violation-context",
+            method="POST",
+            payload={
+                "repo_root": str(fixture_repo),
+                "violation": {
+                    "path": "src/example.py",
+                    "line": 1,
+                    "rule_id": "placeholder-comments",
+                    "message": "placeholder comment found",
+                },
+            },
+        )
+        self.assertEqual(status, 200)
+        response = json.loads(body)
+        self.assertEqual(response["path"], "src/example.py")
+        self.assertEqual(response["line"], 1)
+        self.assertTrue(response["lines"])
+        self.assertIn("placeholder", response["lines"][0]["text"])
+
+    def test_pattern_preview_and_save_workflow(self) -> None:
+        fixture_repo = ROOT / "tests" / "fixtures" / "fixture_repo"
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manifest_path = Path(temp_dir) / "custom_manifest.json"
+            status, body = self._request(
+                "/api/pattern-preview",
+                method="POST",
+                payload={
+                    "repo_root": str(fixture_repo),
+                    "manifest_path": str(ROOT / "sbg_manifest.json"),
+                    "pattern_name": "custom-placeholder",
+                    "pattern_text": "placeholder",
+                    "rule_kind": "placeholder-comments",
+                    "pattern_type": "plain_text",
+                },
+            )
+            self.assertEqual(status, 200)
+            preview = json.loads(body)
+            self.assertGreater(preview["preview_violation_count"], 0)
+            self.assertEqual(preview["rule"]["id"], "custom-placeholder")
+
+            status, body = self._request(
+                "/api/pattern-save",
+                method="POST",
+                payload={
+                    "repo_root": str(fixture_repo),
+                    "manifest_path": str(ROOT / "sbg_manifest.json"),
+                    "output_manifest_path": str(manifest_path),
+                    "pattern_name": "custom-placeholder",
+                    "pattern_text": "placeholder",
+                    "rule_kind": "placeholder-comments",
+                    "pattern_type": "plain_text",
+                },
+            )
+            self.assertEqual(status, 200)
+            saved = json.loads(body)
+            self.assertEqual(saved["manifest_path"], str(manifest_path))
+            self.assertTrue(manifest_path.exists())
+            self.assertEqual(saved["manifest"]["rules"][-1]["id"], "custom-placeholder")
 
 
 if __name__ == "__main__":

@@ -11,8 +11,20 @@ const violationsList = document.getElementById("violations-list");
 const violationsCount = document.getElementById("violations-count");
 const status = document.getElementById("status");
 const refreshManifestButton = document.getElementById("refresh-manifest");
+const drilldownPanel = document.getElementById("drilldown-panel");
+const drilldownContent = document.getElementById("drilldown-content");
+const previewPatternButton = document.getElementById("preview-pattern");
+const savePatternButton = document.getElementById("save-pattern");
+const patternNameInput = document.getElementById("pattern-name");
+const patternTextInput = document.getElementById("pattern-text");
+const patternKindSelect = document.getElementById("pattern-kind");
+const patternTypeSelect = document.getElementById("pattern-type");
+const outputManifestInput = document.getElementById("output-manifest");
+const patternPreviewList = document.getElementById("pattern-preview-list");
+const patternPreviewSummary = document.getElementById("pattern-preview-summary");
 
 let currentManifest = null;
+let currentViolations = [];
 
 function resolveApiUrl(path) {
   if (window.location.protocol === "http:" || window.location.protocol === "https:") {
@@ -34,6 +46,14 @@ function setStatus(message, kind = "") {
   if (kind) {
     status.classList.add(kind);
   }
+}
+
+function escapeHtml(text) {
+  return String(text)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;");
 }
 
 async function requestJson(path, options = {}) {
@@ -59,6 +79,9 @@ async function loadManifest() {
     const payload = await requestJson("/api/manifest");
     currentManifest = payload;
     manifestOutput.textContent = JSON.stringify(payload.manifest || {}, null, 2);
+    if (payload.default_repo_root) {
+      repoPathInput.value = payload.default_repo_root;
+    }
     setStatus("Manifest loaded. Ready to scan.");
   } catch (error) {
     setStatus(`Unable to load manifest: ${error.message}`, "error");
@@ -82,27 +105,102 @@ function renderSummary(summary) {
 }
 
 function renderViolations(violations) {
+  currentViolations = violations || [];
   violationsList.innerHTML = "";
-  if (!violations.length) {
+  if (!currentViolations.length) {
     violationsList.innerHTML = '<div class="empty-state">No violations found. Nice work.</div>';
     violationsCount.textContent = "0 findings";
+    drilldownContent.innerHTML = (
+      '<div class="empty-state">Select a violation to inspect its surrounding file content.</div>'
+    );
     return;
   }
 
-  violationsCount.textContent = `${violations.length} finding${violations.length === 1 ? "" : "s"}`;
-  for (const violation of violations) {
-    const card = document.createElement("article");
+  violationsCount.textContent = `${currentViolations.length} finding${currentViolations.length === 1 ? "" : "s"}`;
+  for (const violation of currentViolations) {
+    const card = document.createElement("button");
+    card.type = "button";
     card.className = "violation-card";
     const location = violation.line ? `${violation.path}:${violation.line}` : violation.path;
     card.innerHTML = `
       <header>
-        <span class="rule-id">${violation.rule_id}</span>
-        <span class="path">${location}</span>
+        <span class="rule-id">${escapeHtml(violation.rule_id)}</span>
+        <span class="path">${escapeHtml(location)}</span>
       </header>
-      <p class="message">${violation.message}</p>
+      <p class="message">${escapeHtml(violation.message)}</p>
     `;
+    card.addEventListener("click", () => showViolationContext(violation));
     violationsList.appendChild(card);
   }
+}
+
+async function showViolationContext(violation) {
+  setStatus(`Loading context for ${violation.path}…`);
+  try {
+    const payload = await requestJson("/api/violation-context", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        repo_root: repoPathInput.value.trim() || ".",
+        violation,
+      }),
+    });
+    renderViolationContext(payload);
+    setStatus(`Context loaded for ${violation.path}.`, "success");
+  } catch (error) {
+    renderViolationContext({ path: violation.path, line: violation.line || null, lines: [] });
+    setStatus(`Unable to load context: ${error.message}`, "error");
+  }
+}
+
+function renderViolationContext(payload) {
+  if (!payload || !payload.lines || !payload.lines.length) {
+    drilldownContent.innerHTML = (
+      '<div class="empty-state">No surrounding content is available for this violation.</div>'
+    );
+    return;
+  }
+
+  const lines = payload.lines
+    .map((line) => {
+      const lineNumber = line.line;
+      const lineText = escapeHtml(line.text);
+      return (
+        `<div class="context-line"><span class="line-number">${lineNumber}</span>` +
+        `<span class="line-text">${lineText}</span></div>`
+      );
+    })
+    .join("");
+
+  drilldownContent.innerHTML = `
+    <div class="drilldown-header">
+      <h3>${escapeHtml(payload.path || "Unknown file")}${payload.line ? `:${payload.line}` : ""}</h3>
+      <p>${payload.violation && payload.violation.message ? escapeHtml(payload.violation.message) : ""}</p>
+    </div>
+    <div class="context-block">${lines}</div>
+  `;
+}
+
+function renderPatternPreview(payload) {
+  const previewViolations = payload.violations || [];
+  patternPreviewSummary.textContent = (
+    `${previewViolations.length} previewed violation${previewViolations.length === 1 ? "" : "s"}`
+  );
+  if (!previewViolations.length) {
+    patternPreviewList.innerHTML = (
+      '<div class="empty-state">No preview violations would be emitted by this pattern.</div>'
+    );
+    return;
+  }
+
+  const items = previewViolations.map((violation) => {
+    const location = violation.line ? `${violation.path}:${violation.line}` : violation.path;
+    return (
+      `<div class="summary-chip"><span>${escapeHtml(violation.rule_id)}</span>` +
+      `<strong>${escapeHtml(location)}</strong></div>`
+    );
+  });
+  patternPreviewList.innerHTML = items.join("");
 }
 
 function togglePanels() {
@@ -113,6 +211,92 @@ function togglePanels() {
 showSummaryCheckbox.addEventListener("change", togglePanels);
 showManifestCheckbox.addEventListener("change", togglePanels);
 refreshManifestButton.addEventListener("click", loadManifest);
+
+previewPatternButton.addEventListener("click", async () => {
+  const repoRoot = repoPathInput.value.trim() || ".";
+  const manifestPath = manifestPathInput.value.trim();
+  const patternName = patternNameInput.value.trim();
+  const patternText = patternTextInput.value.trim();
+  const ruleKind = patternKindSelect.value;
+  const patternType = patternTypeSelect.value;
+  if (!patternName || !patternText) {
+    setStatus("Provide a pattern name and pattern text before previewing.", "error");
+    return;
+  }
+
+  setStatus("Previewing pattern…");
+  try {
+    const payload = await requestJson("/api/pattern-preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        repo_root: repoRoot,
+        manifest_path: manifestPath || null,
+        pattern_name: patternName,
+        pattern_text: patternText,
+        rule_kind: ruleKind,
+        pattern_type: patternType,
+      }),
+    });
+    renderPatternPreview(payload);
+    const previewStatus = (
+      `Preview ready. ${payload.preview_violation_count} violation${payload.preview_violation_count === 1 ? "" : "s"}` +
+      " would be emitted."
+    );
+    setStatus(previewStatus, "success");
+  } catch (error) {
+    patternPreviewSummary.textContent = "Preview failed";
+    patternPreviewList.innerHTML = '<div class="empty-state">Preview failed.</div>';
+    setStatus(`Preview failed: ${error.message}`, "error");
+  }
+});
+
+savePatternButton.addEventListener("click", async () => {
+  const repoRoot = repoPathInput.value.trim() || ".";
+  const manifestPath = manifestPathInput.value.trim();
+  const patternName = patternNameInput.value.trim();
+  const patternText = patternTextInput.value.trim();
+  const ruleKind = patternKindSelect.value;
+  const patternType = patternTypeSelect.value;
+  const outputManifestPath = outputManifestInput.value.trim();
+  if (!patternName || !patternText) {
+    setStatus("Provide a pattern name and pattern text before saving.", "error");
+    return;
+  }
+
+  setStatus("Saving pattern…");
+  try {
+    const payload = await requestJson("/api/pattern-save", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        repo_root: repoRoot,
+        manifest_path: manifestPath || null,
+        output_manifest_path: outputManifestPath || null,
+        pattern_name: patternName,
+        pattern_text: patternText,
+        rule_kind: ruleKind,
+        pattern_type: patternType,
+      }),
+    });
+    currentManifest = {
+      manifest_path: payload.manifest_path,
+      manifest: payload.manifest || { rules: [] },
+      default_repo_root: repoRoot,
+    };
+    manifestOutput.textContent = JSON.stringify(payload.manifest || {}, null, 2);
+    if (payload.manifest_path) {
+      manifestPathInput.value = payload.manifest_path;
+      outputManifestInput.value = payload.manifest_path;
+    }
+    renderPatternPreview(payload);
+    setStatus(`Pattern saved to ${payload.manifest_path}.`, "success");
+  } catch (error) {
+    patternPreviewSummary.textContent = "Save failed";
+    patternPreviewList.innerHTML = '<div class="empty-state">Save failed.</div>';
+    setStatus(`Save failed: ${error.message}`, "error");
+  }
+});
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();

@@ -44,6 +44,48 @@
           </div>
         </form>
 
+        <div class="pattern-form">
+          <label for="pattern-name">Pattern name</label>
+          <input id="pattern-name" name="pattern-name" type="text" placeholder="e.g. custom-placeholder">
+
+          <label for="pattern-text">Pattern (plain text or regex)</label>
+          <input id="pattern-text" name="pattern-text" type="text" placeholder="e.g. TODO or ^TODO">
+
+          <div class="pattern-meta-row">
+            <label class="select-field">
+              <span>Rule kind</span>
+              <select id="pattern-kind">
+                <option value="placeholder-comments">placeholder-comments</option>
+                <option value="marker-spam">marker-spam</option>
+                <option value="long-lines">long-lines</option>
+              </select>
+            </label>
+            <label class="select-field">
+              <span>Match mode</span>
+              <select id="pattern-type">
+                <option value="plain_text">Plain text</option>
+                <option value="regex">Regex</option>
+              </select>
+            </label>
+          </div>
+
+          <label for="output-manifest">Save manifest path (optional)</label>
+          <input
+            id="output-manifest"
+            name="output-manifest"
+            type="text"
+            placeholder="leave blank to update the current manifest"
+          >
+
+          <div class="button-row">
+            <button type="button" id="preview-pattern" class="secondary">Preview pattern</button>
+            <button type="button" id="save-pattern">Save pattern</button>
+          </div>
+
+          <div id="pattern-preview-summary" class="substatus">No preview yet.</div>
+          <div id="pattern-preview-list" class="summary-list"></div>
+        </div>
+
         <div id="status" class="status">Ready to scan.</div>
       </section>
 
@@ -61,6 +103,13 @@
           </div>
           <pre id="manifest-output" class="code-block">{}</pre>
         </section>
+      </section>
+
+      <section id="drilldown-panel" class="panel drilldown-panel">
+        <div class="panel-header">
+          <h2>Violation details</h2>
+        </div>
+        <div id="drilldown-content" class="drilldown-content"></div>
       </section>
 
       <section class="panel">

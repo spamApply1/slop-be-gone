@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from .manifest import load_manifest
+
 
 IGNORED_DIRS = {
     ".git",
@@ -156,7 +158,7 @@ class RuleEngine:
     ) -> list[Violation]:
         if content is None:
             return []
-        patterns = [pattern.lower() for pattern in rule.get("patterns", [])]
+        patterns = self._collect_patterns(rule)
         if not patterns:
             return []
         violations: list[Violation] = []
@@ -168,7 +170,7 @@ class RuleEngine:
             if comment_body is None:
                 continue
             comment_text = comment_body.lower()
-            if any(pattern in comment_text for pattern in patterns):
+            if any(self._matches_pattern(comment_text, pattern, rule, case_sensitive=False) for pattern in patterns):
                 violations.append(
                     Violation(
                         rule_id=rule_id,
@@ -188,13 +190,12 @@ class RuleEngine:
     ) -> list[Violation]:
         if content is None:
             return []
-        markers = [marker.upper() for marker in rule.get("patterns", ["TODO", "FIXME", "XXX"])]
+        patterns = self._collect_patterns(rule, fallback=["TODO", "FIXME", "XXX"])
         threshold = int(rule.get("threshold", 3))
         total_count = 0
         for line in content.splitlines():
-            upper_line = line.upper()
-            for marker in markers:
-                total_count += upper_line.count(marker)
+            for pattern in patterns:
+                total_count += self._count_pattern_matches(line, pattern, rule)
         if total_count >= threshold:
             return [
                 Violation(
@@ -228,8 +229,14 @@ class RuleEngine:
         if content is None:
             return []
         max_length = int(rule.get("max_length", 120))
+        patterns = self._collect_patterns(rule)
         violations: list[Violation] = []
         for line_number, line in enumerate(content.splitlines(), start=1):
+            if patterns and not any(
+                self._matches_pattern(line, pattern, rule, case_sensitive=True)
+                for pattern in patterns
+            ):
+                continue
             if len(line) > max_length:
                 violations.append(
                     Violation(
@@ -259,6 +266,45 @@ class RuleEngine:
                 )
             ]
         return []
+
+    def _collect_patterns(self, rule: dict[str, Any], fallback: list[str] | None = None) -> list[str]:
+        patterns = rule.get("patterns")
+        if patterns is None:
+            pattern = rule.get("pattern")
+            if pattern is None:
+                return fallback or []
+            patterns = [pattern]
+        if isinstance(patterns, str):
+            return [patterns]
+        return [str(pattern) for pattern in patterns if pattern is not None]
+
+    def _matches_pattern(self, text: str, pattern: str, rule: dict[str, Any], case_sensitive: bool) -> bool:
+        if not pattern:
+            return False
+        if self._is_regex_rule(rule):
+            flags = 0 if case_sensitive else re.IGNORECASE
+            try:
+                return bool(re.search(pattern, text, flags))
+            except re.error:
+                return False
+        if not case_sensitive:
+            text = text.lower()
+            pattern = pattern.lower()
+        return pattern in text
+
+    def _count_pattern_matches(self, text: str, pattern: str, rule: dict[str, Any]) -> int:
+        if not pattern:
+            return 0
+        if self._is_regex_rule(rule):
+            try:
+                return len(re.findall(pattern, text, re.IGNORECASE))
+            except re.error:
+                return 0
+        return text.upper().count(pattern.upper())
+
+    def _is_regex_rule(self, rule: dict[str, Any]) -> bool:
+        match_mode = rule.get("match_mode") or rule.get("pattern_type") or rule.get("mode")
+        return str(match_mode).lower() == "regex"
 
     def _strip_comment_prefix(self, text: str) -> str | None:
         prefixes = ("//", "/*", "*", "*/", "#", "<!--", ";")

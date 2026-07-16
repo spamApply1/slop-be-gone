@@ -122,6 +122,41 @@ input[type="text"]:focus {
   accent-color: var(--accent);
 }
 
+.pattern-form {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.pattern-meta-row {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.select-field {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.select-field select {
+  width: 100%;
+  padding: 0.85rem 1rem;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  font: inherit;
+}
+
+.substatus {
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
 .button-row {
   display: flex;
   gap: 0.75rem;
@@ -227,10 +262,19 @@ button.secondary {
 }
 
 .violation-card {
+  width: 100%;
+  text-align: left;
   padding: 1rem;
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.08);
+  color: inherit;
+  cursor: pointer;
+}
+
+.violation-card:hover {
+  border-color: rgba(124, 156, 255, 0.35);
+  transform: translateY(-1px);
 }
 
 .violation-card header {
@@ -254,6 +298,55 @@ button.secondary {
 .violation-card .message {
   color: var(--muted);
   line-height: 1.5;
+}
+
+.drilldown-panel {
+  margin-bottom: 1rem;
+}
+
+.drilldown-header {
+  display: grid;
+  gap: 0.4rem;
+  margin-bottom: 0.9rem;
+}
+
+.drilldown-header h3 {
+  margin: 0;
+  color: var(--text);
+}
+
+.drilldown-header p {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.context-block {
+  display: grid;
+  gap: 0.3rem;
+  padding: 0.9rem;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.context-line {
+  display: grid;
+  grid-template-columns: 54px 1fr;
+  gap: 0.75rem;
+  align-items: start;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 0.94rem;
+  color: var(--muted);
+}
+
+.context-line .line-number {
+  color: var(--accent);
+  text-align: right;
+}
+
+.context-line .line-text {
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .empty-state {

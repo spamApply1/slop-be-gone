@@ -34,8 +34,9 @@ def resolve_default_repo_root() -> Path:
 
     return REPO_ROOT.resolve()
 
+
 from sbg.engine import RuleEngine
-from sbg.manifest import resolve_manifest_path
+from sbg.manifest import resolve_manifest_path, write_manifest
 
 
 class DashboardHandler(BaseHTTPRequestHandler):
@@ -59,6 +60,15 @@ class DashboardHandler(BaseHTTPRequestHandler):
             return
         if path == "/api/scan":
             self._scan_repository()
+            return
+        if path == "/api/violation-context":
+            self._serve_violation_context()
+            return
+        if path == "/api/pattern-preview":
+            self._serve_pattern_preview()
+            return
+        if path == "/api/pattern-save":
+            self._serve_pattern_save()
             return
         if path in {"/", "/index.html"}:
             self._serve_static_asset("index.html", "text/html; charset=utf-8")
@@ -87,47 +97,191 @@ class DashboardHandler(BaseHTTPRequestHandler):
         self._send_json(payload)
 
     def _scan_repository(self) -> None:
-        try:
-            length = int(self.headers.get("Content-Length", "0"))
-        except ValueError:
-            length = 0
-        if length <= 0:
-            payload: dict[str, Any] = {}
-        else:
-            body = self.rfile.read(length).decode("utf-8")
-            payload = json.loads(body)
-
-        repo_root = payload.get("repo_root")
-        manifest_path = payload.get("manifest_path") or None
-
-        if repo_root:
-            resolved_repo = Path(repo_root).expanduser()
-            if not resolved_repo.is_absolute():
-                resolved_repo = (Path.cwd() / resolved_repo).resolve()
-        else:
-            resolved_repo = resolve_default_repo_root()
-
-        manifest_target = None
-        if manifest_path:
-            manifest_target = resolve_manifest_path(manifest_path)
-        else:
-            manifest_target = resolve_manifest_path(None)
+        payload = self._read_json_payload()
+        repo_root = self._resolve_repo_root(payload.get("repo_root"))
+        manifest_target = self._resolve_manifest_path(payload.get("manifest_path"), repo_root=repo_root)
 
         engine = RuleEngine.from_manifest_path(manifest_target)
-        violations = engine.scan_repository(resolved_repo)
+        violations = engine.scan_repository(repo_root)
 
         summary = {
             "total": len(violations),
             "by_rule": dict(sorted(Counter(violation.rule_id for violation in violations).items())),
         }
         response_payload = {
-            "repo_root": str(resolved_repo),
+            "repo_root": str(repo_root),
             "manifest_path": str(manifest_target),
             "violation_count": len(violations),
             "summary": summary,
             "violations": [violation.as_dict() for violation in violations],
         }
         self._send_json(response_payload)
+
+    def _serve_violation_context(self) -> None:
+        payload = self._read_json_payload()
+        repo_root = self._resolve_repo_root(payload.get("repo_root"))
+        violation = payload.get("violation") or {}
+        if not isinstance(violation, dict):
+            self._send_json({"error": "violation payload must be an object"})
+            return
+
+        relative_path = violation.get("path")
+        if not relative_path:
+            self._send_json({"path": None, "line": None, "lines": []})
+            return
+
+        file_path = self._resolve_file_path(repo_root, relative_path)
+        if not file_path.exists() or not file_path.is_file():
+            self._send_json({"path": relative_path, "line": None, "lines": []})
+            return
+
+        content = file_path.read_text(encoding="utf-8")
+        lines = content.splitlines()
+        line_number = violation.get("line")
+        if line_number is not None:
+            try:
+                line_number = int(line_number)
+            except (TypeError, ValueError):
+                line_number = None
+
+        if line_number is None or line_number < 1:
+            start_index = 0
+            end_index = min(len(lines), 8)
+        else:
+            start_index = max(0, line_number - 3)
+            end_index = min(len(lines), line_number + 2)
+
+        context_lines = [
+            {"line": index + 1, "text": lines[index] if index < len(lines) else ""}
+            for index in range(start_index, end_index)
+        ]
+        response_payload = {
+            "path": relative_path,
+            "line": line_number,
+            "line_count": len(lines),
+            "lines": context_lines,
+            "violation": violation,
+        }
+        self._send_json(response_payload)
+
+    def _serve_pattern_preview(self) -> None:
+        payload = self._read_json_payload()
+        repo_root = self._resolve_repo_root(payload.get("repo_root"))
+        base_manifest_path = self._resolve_manifest_path(payload.get("manifest_path"), repo_root=repo_root)
+        rule = self._build_rule_payload(payload)
+        manifest = self._load_manifest(base_manifest_path)
+        preview_manifest = {"rules": [*manifest.get("rules", []), rule]}
+        engine = RuleEngine(preview_manifest)
+        violations = engine.scan_repository(repo_root)
+        pattern_violations = [violation for violation in violations if violation.rule_id == rule["id"]]
+        response_payload = {
+            "repo_root": str(repo_root),
+            "manifest_path": str(base_manifest_path),
+            "rule": rule,
+            "preview_violation_count": len(pattern_violations),
+            "violations": [violation.as_dict() for violation in pattern_violations],
+        }
+        self._send_json(response_payload)
+
+    def _serve_pattern_save(self) -> None:
+        payload = self._read_json_payload()
+        repo_root = self._resolve_repo_root(payload.get("repo_root"))
+        base_manifest_path = self._resolve_manifest_path(payload.get("manifest_path"), repo_root=repo_root)
+        target_manifest_path = (
+            payload.get("output_manifest_path")
+            or payload.get("target_manifest_path")
+            or payload.get("manifest_path")
+        )
+        target_manifest_path = self._resolve_manifest_path(target_manifest_path, repo_root=repo_root)
+        rule = self._build_rule_payload(payload)
+        manifest = self._load_manifest(base_manifest_path)
+        rules = list(manifest.get("rules", []))
+        if not any(existing.get("id") == rule["id"] for existing in rules):
+            rules.append(rule)
+        else:
+            rules = [existing if existing.get("id") != rule["id"] else rule for existing in rules]
+        manifest["rules"] = rules
+        manifest_path = write_manifest(target_manifest_path, manifest, repo_root=repo_root)
+        preview_manifest = {"rules": rules}
+        engine = RuleEngine(preview_manifest)
+        violations = engine.scan_repository(repo_root)
+        pattern_violations = [violation for violation in violations if violation.rule_id == rule["id"]]
+        response_payload = {
+            "repo_root": str(repo_root),
+            "manifest_path": str(manifest_path),
+            "rule": rule,
+            "saved_rule_count": len(rules),
+            "preview_violation_count": len(pattern_violations),
+            "violations": [violation.as_dict() for violation in pattern_violations],
+            "manifest": manifest,
+        }
+        self._send_json(response_payload)
+
+    def _build_rule_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
+        pattern_name = str(payload.get("pattern_name") or "").strip()
+        if not pattern_name:
+            raise ValueError("pattern_name is required")
+        pattern_text = str(payload.get("pattern_text") or "").strip()
+        if not pattern_text:
+            raise ValueError("pattern_text is required")
+        rule_kind = str(payload.get("rule_kind") or "placeholder-comments")
+        pattern_type = str(payload.get("pattern_type") or payload.get("match_mode") or "plain_text")
+        rule: dict[str, Any] = {
+            "id": pattern_name,
+            "type": rule_kind,
+            "enabled": True,
+            "pattern": pattern_text,
+            "match_mode": pattern_type,
+        }
+        if rule_kind == "marker-spam":
+            rule["threshold"] = 1
+        if rule_kind == "long-lines":
+            rule["max_length"] = int(payload.get("max_length") or 120)
+        if rule_kind in {"placeholder-comments", "marker-spam"}:
+            rule["patterns"] = [pattern_text]
+        return rule
+
+    def _load_manifest(self, path: Path) -> dict[str, Any]:
+        if path.exists():
+            return json.loads(path.read_text(encoding="utf-8"))
+        return {"rules": []}
+
+    def _resolve_repo_root(self, repo_root: str | Path | None) -> Path:
+        if repo_root:
+            resolved_repo = Path(repo_root).expanduser()
+            if not resolved_repo.is_absolute():
+                resolved_repo = (Path.cwd() / resolved_repo).resolve()
+            return resolved_repo.resolve()
+        return resolve_default_repo_root()
+
+    def _resolve_manifest_path(self, manifest_path: str | Path | None, repo_root: str | Path | None = None) -> Path:
+        if manifest_path:
+            return resolve_manifest_path(manifest_path, repo_root=repo_root)
+        return resolve_manifest_path(None, repo_root=repo_root)
+
+    def _resolve_file_path(self, repo_root: Path, relative_path: str | Path) -> Path:
+        candidate = Path(relative_path).expanduser()
+        if not candidate.is_absolute():
+            candidate = (repo_root / candidate).resolve()
+        return candidate.resolve()
+
+    def _read_json_payload(self) -> dict[str, Any]:
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            length = 0
+        if length <= 0:
+            return {}
+        body = self.rfile.read(length).decode("utf-8")
+        try:
+            payload = json.loads(body)
+        except json.JSONDecodeError as exc:
+            self._send_json({"error": f"invalid JSON: {exc.msg}"})
+            raise ValueError("invalid JSON") from exc
+        if not isinstance(payload, dict):
+            self._send_json({"error": "request body must be a JSON object"})
+            raise ValueError("request body must be a JSON object")
+        return payload
 
     def _serve_static_asset(self, asset_name: str, content_type: str) -> None:
         asset_path = self._resolve_static_path(asset_name)
