@@ -151,6 +151,25 @@ class CLITests(unittest.TestCase):
         self.assertIn("Suggestion:", output)
         self.assertIn("Remove placeholder comments", output)
 
+    def test_validate_accepts_bundled_manifest(self) -> None:
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            exit_code = main(["validate", str(ROOT)])
+        self.assertEqual(exit_code, 0)
+        self.assertIn("is valid", stdout.getvalue())
+
+    def test_validate_rejects_malformed_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_path = Path(temp_dir)
+            (repo_path / "sbg_manifest.json").write_text(
+                '{"rules": [{"id": "broken"}]}', encoding="utf-8"
+            )
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                exit_code = main(["validate", str(repo_path)])
+            self.assertEqual(exit_code, 1)
+            self.assertIn("problem", stdout.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()

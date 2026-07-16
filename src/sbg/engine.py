@@ -24,6 +24,79 @@ IGNORED_DIRS = {
 }
 
 
+KNOWN_RULE_TYPES = {
+    "placeholder-comments",
+    "marker-spam",
+    "empty-files",
+    "long-lines",
+    "file-size",
+    "button-actions",
+    "button-types",
+    "form-labels",
+    "asset-links",
+    "fully-defined-rules",
+    "source-loadable",
+    "dynamic-config",
+    "merge-conflict-markers",
+    "secret-scan",
+    "debug-artifacts",
+    "composite",
+}
+
+
+def validate_manifest(manifest: Any) -> list[str]:
+    """Return a list of human-readable problems with a manifest definition.
+
+    An empty list means the manifest is structurally valid. This is the
+    programmatic guard that keeps dead or malformed policy from silently
+    no-opping inside the engine.
+    """
+
+    errors: list[str] = []
+    if not isinstance(manifest, dict):
+        return ["manifest must be a JSON object with a 'rules' array"]
+    rules = manifest.get("rules")
+    if not isinstance(rules, list):
+        return ["manifest must contain a 'rules' array"]
+    seen_ids: set[str] = set()
+    for index, rule in enumerate(rules):
+        label = f"rule {index + 1}"
+        if not isinstance(rule, dict):
+            errors.append(f"{label} is not a JSON object")
+            continue
+        rule_id = rule.get("id")
+        if isinstance(rule_id, str) and rule_id.strip():
+            label = f"rule '{rule_id}'"
+            if rule_id in seen_ids:
+                errors.append(f"{label} has a duplicate id")
+            seen_ids.add(rule_id)
+        else:
+            errors.append(f"{label} is missing a non-empty 'id'")
+        rule_type = rule.get("type")
+        if not isinstance(rule_type, str) or not rule_type.strip():
+            errors.append(f"{label} is missing a non-empty 'type'")
+        elif rule_type not in KNOWN_RULE_TYPES:
+            errors.append(f"{label} has unknown type '{rule_type}'")
+        elif rule_type == "composite":
+            errors.extend(_validate_composite_shape(label, rule))
+    return errors
+
+
+def _validate_composite_shape(label: str, rule: dict[str, Any]) -> list[str]:
+    problems: list[str] = []
+    child_rules = rule.get("rules")
+    if not isinstance(child_rules, list) or not child_rules:
+        problems.append(f"{label} (composite) must define a non-empty 'rules' array")
+    logic = rule.get("logic", "all")
+    if not isinstance(logic, str) or logic.strip().lower() not in {"all", "any"}:
+        problems.append(f"{label} (composite) 'logic' must be 'all' or 'any'")
+    match_value = rule.get("match")
+    if match_value is not None and not isinstance(match_value, (str, list)):
+        problems.append(f"{label} (composite) 'match' must be a string or list of globs")
+    return problems
+
+
+
 @dataclass(frozen=True)
 class Violation:
     rule_id: str
@@ -88,7 +161,10 @@ class RuleEngine:
                 except ValueError:
                     relative_path = candidate.as_posix()
                 file_size = candidate.stat().st_size
-                content = self._read_text(candidate)
+                if relative_path in repo_context["files"]:
+                    content = repo_context["files"][relative_path]
+                else:
+                    content = self._read_text(candidate)
                 violations.extend(
                     self._apply_rule(
                         rule,
@@ -339,7 +415,125 @@ class RuleEngine:
             return self._apply_source_loadable(rule, repo_root, relative_path, content, rule_id)
         if rule_type == "dynamic-config":
             return self._apply_dynamic_config(rule, relative_path, content, rule_id)
+        if rule_type == "merge-conflict-markers":
+            return self._apply_merge_conflict_markers(rule, relative_path, content, rule_id)
+        if rule_type == "secret-scan":
+            return self._apply_secret_scan(rule, relative_path, content, rule_id)
+        if rule_type == "debug-artifacts":
+            return self._apply_debug_artifacts(rule, relative_path, content, rule_id)
         return []
+
+    def _apply_merge_conflict_markers(
+        self,
+        rule: dict[str, Any],
+        relative_path: str,
+        content: str | None,
+        rule_id: str,
+    ) -> list[Violation]:
+        del rule
+        if content is None:
+            return []
+        # Conflict markers are a fixed length run of a single character; building
+        # the patterns dynamically keeps this very source file from matching itself.
+        marker_specs = [
+            ("<" * 7, "start"),
+            ("|" * 7, "base"),
+            (">" * 7, "end"),
+        ]
+        violations: list[Violation] = []
+        for line_number, line in enumerate(content.splitlines(), start=1):
+            for marker, position in marker_specs:
+                if line.startswith(marker) and (len(line) == len(marker) or line[len(marker)] in {" ", "\t"}):
+                    violations.append(
+                        Violation(
+                            rule_id=rule_id,
+                            path=relative_path,
+                            line=line_number,
+                            message=f"unresolved git merge conflict marker ({position}) found",
+                        )
+                    )
+                    break
+        return violations
+
+    def _apply_secret_scan(
+        self,
+        rule: dict[str, Any],
+        relative_path: str,
+        content: str | None,
+        rule_id: str,
+    ) -> list[Violation]:
+        del rule
+        if content is None:
+            return []
+        patterns = [
+            (re.compile(r"-----BEGIN(?: [A-Z0-9]+)* PRIVATE KEY-----"), "private key block"),
+            (re.compile(r"\bAKIA[0-9A-Z]{16}\b"), "AWS access key id"),
+            (re.compile(r"\bASIA[0-9A-Z]{16}\b"), "AWS temporary access key id"),
+            (re.compile(r"\bgh[pousr]_[0-9A-Za-z]{36}\b"), "GitHub token"),
+            (re.compile(r"\bgithub_pat_[0-9A-Za-z_]{22,}\b"), "GitHub fine-grained token"),
+            (re.compile(r"\bxox[baprs]-[0-9A-Za-z-]{10,}\b"), "Slack token"),
+            (re.compile(r"\bAIza[0-9A-Za-z_\-]{35}\b"), "Google API key"),
+            (re.compile(r"\bsk_live_[0-9A-Za-z]{24,}\b"), "Stripe live secret key"),
+        ]
+        violations: list[Violation] = []
+        for line_number, line in enumerate(content.splitlines(), start=1):
+            for pattern, label in patterns:
+                if pattern.search(line):
+                    violations.append(
+                        Violation(
+                            rule_id=rule_id,
+                            path=relative_path,
+                            line=line_number,
+                            message=f"possible committed secret detected ({label})",
+                        )
+                    )
+                    break
+        return violations
+
+    def _apply_debug_artifacts(
+        self,
+        rule: dict[str, Any],
+        relative_path: str,
+        content: str | None,
+        rule_id: str,
+    ) -> list[Violation]:
+        if content is None:
+            return []
+        suffix = Path(relative_path).suffix.lower()
+        language_patterns = {
+            frozenset({".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".vue"}): [
+                (re.compile(r"(?<![A-Za-z0-9_.])debugger\s*;"), "debugger statement"),
+                (re.compile(r"(?<![A-Za-z0-9_.])console\.(?:log|debug|trace)\s*\("), "console debug call"),
+            ],
+            frozenset({".py"}): [
+                (re.compile(r"(?<![A-Za-z0-9_.])breakpoint\s*\("), "breakpoint call"),
+                (re.compile(r"(?<![A-Za-z0-9_.])pdb\.set_trace\s*\("), "pdb trace call"),
+            ],
+        }
+        selected: list[tuple[re.Pattern[str], str]] = []
+        for suffixes, entries in language_patterns.items():
+            if suffix in suffixes:
+                selected = entries
+                break
+        if not selected:
+            return []
+        violations: list[Violation] = []
+        for line_number, line in enumerate(content.splitlines(), start=1):
+            stripped = line.strip()
+            if not stripped:
+                continue
+            for pattern, label in selected:
+                if pattern.search(stripped):
+                    violations.append(
+                        Violation(
+                            rule_id=rule_id,
+                            path=relative_path,
+                            line=line_number,
+                            message=f"debug artifact left in source ({label})",
+                        )
+                    )
+                    break
+        return violations
 
     def _apply_dynamic_config(
         self,

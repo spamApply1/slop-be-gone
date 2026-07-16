@@ -221,6 +221,69 @@
           "kind": "manifest"
         }
       ]
+    },
+    {
+      "id": "self-merge-conflict-markers",
+      "type": "merge-conflict-markers",
+      "enabled": true,
+      "description": "Freeze unresolved merge conflict markers inside the SBG repository itself.",
+      "what": "Require SBG's own files to be free of git conflict markers before any commit lands.",
+      "why": "A hygiene framework must never ship half-merged files; that would undermine the credibility of the enforcement it provides.",
+      "source_refs": [
+        {
+          "label": "Rule guide",
+          "path": "docs/hygiene-rules.md",
+          "kind": "doc",
+          "anchor": "merge-conflict-markers"
+        },
+        {
+          "label": "Rule source",
+          "path": "sbg_self_manifest.json",
+          "kind": "manifest"
+        }
+      ]
+    },
+    {
+      "id": "self-secret-scan",
+      "type": "secret-scan",
+      "enabled": true,
+      "description": "Freeze committed credentials inside the SBG repository itself.",
+      "what": "Require SBG's own source and config to be free of recognizable API keys, tokens, and private key blocks.",
+      "why": "The framework should hold itself to the same security bar it enforces for the repositories that adopt it.",
+      "source_refs": [
+        {
+          "label": "Rule guide",
+          "path": "docs/hygiene-rules.md",
+          "kind": "doc",
+          "anchor": "secret-scan"
+        },
+        {
+          "label": "Rule source",
+          "path": "sbg_self_manifest.json",
+          "kind": "manifest"
+        }
+      ]
+    },
+    {
+      "id": "self-debug-artifacts",
+      "type": "debug-artifacts",
+      "enabled": true,
+      "description": "Freeze leftover debugging statements inside the SBG repository itself.",
+      "what": "Require SBG's own JavaScript and Python to be free of debugger, console, and breakpoint instrumentation.",
+      "why": "The dashboard and engine should ship clean; leftover debug hooks are exactly the slop the framework is meant to prevent.",
+      "source_refs": [
+        {
+          "label": "Rule guide",
+          "path": "docs/hygiene-rules.md",
+          "kind": "doc",
+          "anchor": "debug-artifacts"
+        },
+        {
+          "label": "Rule source",
+          "path": "sbg_self_manifest.json",
+          "kind": "manifest"
+        }
+      ]
     }
   ]
 }

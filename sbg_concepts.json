@@ -159,6 +159,39 @@
         "match src/**/*.py and require both long-lines and placeholder-comments to pass",
         "logic any: a file may satisfy either of two acceptable forms"
       ]
+    },
+    {
+      "id": "merge-conflict-markers",
+      "title": "Merge conflict markers",
+      "category": "structure",
+      "description": "Freeze the guardrail that blocks half-merged files still carrying git conflict markers.",
+      "rule_kind": "merge-conflict-markers",
+      "pattern_name": "merge-conflict-markers",
+      "pattern_text": "",
+      "pattern_type": "plain_text",
+      "examples": ["A file left with unresolved conflict markers after a merge or rebase."]
+    },
+    {
+      "id": "secret-scan",
+      "title": "Committed secrets",
+      "category": "security",
+      "description": "Freeze the security guardrail that blocks recognizable API keys, tokens, and private key blocks from being committed.",
+      "rule_kind": "secret-scan",
+      "pattern_name": "secret-scan",
+      "pattern_text": "",
+      "pattern_type": "plain_text",
+      "examples": ["An AWS access key id, GitHub token, or PEM private key block pasted into source."]
+    },
+    {
+      "id": "debug-artifacts",
+      "title": "Debug artifacts",
+      "category": "maintenance",
+      "description": "Freeze the cleanup rule that blocks leftover debugger, console, and breakpoint statements.",
+      "rule_kind": "debug-artifacts",
+      "pattern_name": "debug-artifacts",
+      "pattern_text": "",
+      "pattern_type": "plain_text",
+      "examples": ["A console.log or debugger statement, or a breakpoint()/pdb.set_trace() call left in source."]
     }
   ]
 }

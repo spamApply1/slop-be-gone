@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT / "src") not in sys.path:
     sys.path.insert(0, str(ROOT / "src"))
 
-from sbg.engine import RuleEngine
+from sbg.engine import RuleEngine, validate_manifest
 from sbg.manifest import load_manifest
 
 
@@ -221,6 +221,65 @@ class RuleEngineTests(unittest.TestCase):
             flagged_paths = {violation.path for violation in violations}
             self.assertEqual(flagged_paths, {"both_bad.py"})
             self.assertTrue(any("failed all of" in violation.message for violation in violations))
+
+    def test_merge_conflict_marker_rule_flags_unresolved_markers(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = Path(temp_dir)
+            # Build markers dynamically so this test source never matches the rule itself.
+            conflict = (
+                ("<" * 7) + " HEAD\nkept = 1\n" + ("=" * 7) + "\nother = 2\n" + (">" * 7) + " branch\n"
+            )
+            (repo_root / "conflicted.py").write_text(conflict, encoding="utf-8")
+            engine = RuleEngine(
+                {"rules": [{"id": "merge-conflict-markers", "type": "merge-conflict-markers", "enabled": True}]}
+            )
+            violations = engine.scan_repository(repo_root)
+
+            self.assertIn("merge-conflict-markers", {violation.rule_id for violation in violations})
+            self.assertTrue(any(violation.line == 1 for violation in violations))
+
+    def test_secret_scan_rule_flags_high_confidence_credentials(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = Path(temp_dir)
+            # Assemble the token dynamically so this test file holds no literal secret.
+            fake_key = "AKIA" + ("A" * 16)
+            (repo_root / "config.py").write_text(f'AWS_KEY = "{fake_key}"\n', encoding="utf-8")
+            engine = RuleEngine({"rules": [{"id": "secret-scan", "type": "secret-scan", "enabled": True}]})
+            violations = engine.scan_repository(repo_root)
+
+            self.assertIn("secret-scan", {violation.rule_id for violation in violations})
+            self.assertTrue(any("AWS access key" in violation.message for violation in violations))
+
+    def test_debug_artifacts_rule_flags_leftover_debug_statements(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = Path(temp_dir)
+            (repo_root / "ui.js").write_text("function handler() {\n  console.log('x');\n}\n", encoding="utf-8")
+            # Assemble the call dynamically so this test source holds no literal debug artifact.
+            debug_call = "break" + "point()"
+            (repo_root / "svc.py").write_text(f"def run():\n    {debug_call}\n    return 1\n", encoding="utf-8")
+            engine = RuleEngine({"rules": [{"id": "debug-artifacts", "type": "debug-artifacts", "enabled": True}]})
+            violations = engine.scan_repository(repo_root)
+
+            flagged_paths = {violation.path for violation in violations}
+            self.assertEqual(flagged_paths, {"svc.py", "ui.js"})
+
+    def test_validate_manifest_reports_structural_problems(self) -> None:
+        clean = validate_manifest({"rules": [{"id": "one", "type": "secret-scan"}]})
+        self.assertEqual(clean, [])
+
+        problems = validate_manifest(
+            {
+                "rules": [
+                    {"id": "dup", "type": "secret-scan"},
+                    {"id": "dup", "type": "not-a-real-type"},
+                    {"type": "composite", "rules": [], "logic": "maybe"},
+                ]
+            }
+        )
+        self.assertTrue(any("duplicate id" in problem for problem in problems))
+        self.assertTrue(any("unknown type" in problem for problem in problems))
+        self.assertTrue(any("non-empty 'rules'" in problem for problem in problems))
+        self.assertTrue(any("'logic'" in problem for problem in problems))
 
 
 if __name__ == "__main__":

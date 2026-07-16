@@ -333,6 +333,56 @@ Bad pattern:
 }
 ```
 
+## 14. merge-conflict-markers
+
+What it catches:
+- Files left in a half-merged state, where a line begins with seven `<`
+  characters (the current side), seven `=` characters (the divider), or seven
+  `>` characters (the incoming side) produced by an unfinished git merge or
+  rebase.
+
+Why it matters:
+- A file with conflict markers is broken: it will not parse or run, and if it is
+  committed it corrupts history and confuses every later reader. This is one of
+  the highest-signal, lowest-false-positive checks a commit gate can enforce.
+
+How to fix:
+- Finish resolving the conflict, delete every marker line, keep the intended
+  content, and re-stage the file before committing.
+
+## 15. secret-scan
+
+What it catches:
+- High-confidence committed credentials such as AWS access key ids (the `AKIA`
+  prefix followed by sixteen uppercase characters), GitHub tokens (the `ghp_`
+  family), Slack tokens (the `xoxb`/`xoxp` family), Google API keys (the `AIza`
+  prefix), Stripe live secret keys, and PEM `BEGIN ... PRIVATE KEY` blocks.
+
+Why it matters:
+- A committed secret is a security incident. Once it lands in history it leaks
+  into clones, forks, mirrors, and backups, so the credential must be rotated
+  even after it is removed. Blocking it at commit time is the only reliable fix.
+
+How to fix:
+- Remove the value from source, rotate the exposed credential, and load it from
+  an environment variable or secret manager at runtime instead.
+
+## 16. debug-artifacts
+
+What it catches:
+- Temporary debugging instrumentation left in source: `debugger` statements and
+  `console.log`/`console.debug`/`console.trace` calls in JavaScript or
+  TypeScript, and `breakpoint()` or `pdb.set_trace()` calls in Python.
+
+Why it matters:
+- Debug artifacts are noise that was never meant to ship. They can pause
+  execution, leak internal state to logs, and are a clear signal that a change
+  was not cleaned up before it was committed.
+
+How to fix:
+- Remove the debugging statement, or replace it with an intentional, configured
+  logging call that belongs in the codebase.
+
 ## How to use this guide
 
 Use these rules as a quick reference when a check fails. If a violation appears,

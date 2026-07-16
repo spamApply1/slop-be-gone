@@ -262,6 +262,69 @@
           "kind": "manifest"
         }
       ]
+    },
+    {
+      "id": "merge-conflict-markers",
+      "type": "merge-conflict-markers",
+      "enabled": true,
+      "description": "Freeze unresolved git merge conflict markers so half-merged files never reach a commit.",
+      "what": "Reject files that still contain git conflict markers left behind by an incomplete merge or rebase.",
+      "why": "Conflict markers mean the file is in a broken, half-merged state that will not run and pollutes history if committed.",
+      "source_refs": [
+        {
+          "label": "Rule guide",
+          "path": "docs/hygiene-rules.md",
+          "kind": "doc",
+          "anchor": "merge-conflict-markers"
+        },
+        {
+          "label": "Rule source",
+          "path": "sbg_manifest.json",
+          "kind": "manifest"
+        }
+      ]
+    },
+    {
+      "id": "secret-scan",
+      "type": "secret-scan",
+      "enabled": true,
+      "description": "Freeze high-confidence credentials so secrets are never committed into source.",
+      "what": "Reject files that contain recognizable API keys, tokens, or private key blocks from common providers.",
+      "why": "Committed secrets are a serious security incident: they leak into history, mirrors, and backups and must be rotated once exposed.",
+      "source_refs": [
+        {
+          "label": "Rule guide",
+          "path": "docs/hygiene-rules.md",
+          "kind": "doc",
+          "anchor": "secret-scan"
+        },
+        {
+          "label": "Rule source",
+          "path": "sbg_manifest.json",
+          "kind": "manifest"
+        }
+      ]
+    },
+    {
+      "id": "debug-artifacts",
+      "type": "debug-artifacts",
+      "enabled": true,
+      "description": "Freeze leftover debugging statements so temporary instrumentation never ships.",
+      "what": "Reject debugger/console/breakpoint statements that were added for local debugging and never removed.",
+      "why": "Debug artifacts leak noise into production, can pause execution, and signal that a change was not cleaned up before committing.",
+      "source_refs": [
+        {
+          "label": "Rule guide",
+          "path": "docs/hygiene-rules.md",
+          "kind": "doc",
+          "anchor": "debug-artifacts"
+        },
+        {
+          "label": "Rule source",
+          "path": "sbg_manifest.json",
+          "kind": "manifest"
+        }
+      ]
     }
   ]
 }

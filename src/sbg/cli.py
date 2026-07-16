@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from .engine import RuleEngine
+from .engine import RuleEngine, validate_manifest
 from .manifest import resolve_manifest_path
 from .script_maps import build_script_map
 
@@ -53,6 +53,15 @@ def build_parser() -> argparse.ArgumentParser:
     script_map_parser = subparsers.add_parser("script-map")
     script_map_parser.add_argument("repo_root", nargs="?", default=".", help="repository root to analyze")
     script_map_parser.add_argument("--output", dest="output", default=None, help="write the script map JSON to a file")
+
+    validate_parser = subparsers.add_parser("validate")
+    validate_parser.add_argument(
+        "repo_root",
+        nargs="?",
+        default=".",
+        help="repository root whose manifest should be validated",
+    )
+    validate_parser.add_argument("--manifest", dest="manifest", default=None, help="path to a custom manifest")
     return parser
 
 
@@ -68,6 +77,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_report(args)
     if args.command == "script-map":
         return run_script_map(args)
+    if args.command == "validate":
+        return run_validate(args)
 
     parser.error("unsupported command")
 
@@ -205,13 +216,39 @@ def run_script_map(args: argparse.Namespace) -> int:
     return 0
 
 
+def run_validate(args: argparse.Namespace) -> int:
+    repo_root = Path(args.repo_root).expanduser().resolve()
+    manifest_path = resolve_scan_manifest(args.manifest, repo_root)
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        print(f"Manifest not found: {manifest_path}", file=sys.stderr)
+        return 1
+    except json.JSONDecodeError as exc:
+        print(f"Manifest is not valid JSON ({manifest_path}): {exc.msg}", file=sys.stderr)
+        return 1
+
+    errors = validate_manifest(manifest)
+    if errors:
+        print(f"Manifest {manifest_path} has {len(errors)} problem(s):")
+        for error in errors:
+            print(f"  - {error}")
+        return 1
+    rule_count = len(manifest.get("rules", []))
+    print(f"Manifest {manifest_path} is valid ({rule_count} rule(s)).")
+    return 0
+
+
 def suggestion_for_rule(rule_id: str) -> str:
     suggestions = {
         "placeholder-comments": "Remove placeholder comments or sample content before committing.",
-        "marker-spam": "Replace marker spam with actionable notes and clear TODOs.",
+        "marker-spam": "Replace marker spam with actionable notes and clear follow-ups.",
         "empty-files": "Delete empty files or add meaningful content before committing.",
         "long-lines": "Wrap or refactor long lines to keep the codebase readable.",
         "file-size": "Split large files or move generated content elsewhere.",
+        "merge-conflict-markers": "Resolve the git conflict and remove all conflict markers before committing.",
+        "secret-scan": "Remove the credential, rotate it, and load it from the environment instead.",
+        "debug-artifacts": "Remove debugger/console/breakpoint statements left over from debugging.",
     }
     return suggestions.get(rule_id, "Review these findings and fix the underlying issue before committing.")
 
