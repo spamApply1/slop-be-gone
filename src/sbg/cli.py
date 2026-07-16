@@ -36,6 +36,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="treat warning-severity violations as failures too",
     )
+    check_parser.add_argument(
+        "--fix",
+        action="store_true",
+        help="auto-fix violations that support it (trailing whitespace, final newline) before reporting",
+    )
 
     install_parser = subparsers.add_parser("install-hooks")
     install_parser.add_argument(
@@ -132,12 +137,17 @@ def run_check(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
         return 1
 
     engine = RuleEngine(manifest)
-    if args.staged:
-        violations = engine.scan_staged_files(repo_root)
-    else:
-        violations = engine.scan_repository(repo_root)
+    if args.fix:
+        if args.staged:
+            fixed = engine.autofix_staged_files(repo_root)
+        else:
+            fixed = engine.autofix_repository(repo_root)
+        if not args.json:
+            for fixed_path in fixed:
+                print(f"fixed {fixed_path}")
+            if fixed:
+                print(f"Auto-fixed {len(fixed)} file(s).")
 
-    engine = RuleEngine(manifest)
     if args.staged:
         violations = engine.scan_staged_files(repo_root)
     else:

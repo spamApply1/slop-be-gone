@@ -174,6 +174,23 @@ _DYNAMIC_CONFIG_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
 )
 
 
+def _fix_trailing_whitespace(text: str) -> str:
+    return re.sub(r"[ \t]+(\r\n|\r|\n|$)", r"\1", text)
+
+
+def _fix_final_newline(text: str) -> str:
+    if not text or text.endswith(("\n", "\r")):
+        return text
+    newline = "\r\n" if "\r\n" in text else "\n"
+    return text + newline
+
+
+FIXABLE_RULE_TYPES: dict[str, Any] = {
+    "trailing-whitespace": _fix_trailing_whitespace,
+    "final-newline": _fix_final_newline,
+}
+
+
 
 @dataclass(frozen=True)
 class Violation:
@@ -298,6 +315,13 @@ class RuleEngine:
         return [replace(violation, severity=severity) for violation in violations]
 
     def scan_staged_files(self, repo_root: str | Path) -> list[Violation]:
+        staged = self._staged_file_list(repo_root)
+        if staged is None:
+            return []
+        git_root, staged_paths = staged
+        return self.scan_paths(git_root, staged_paths)
+
+    def _staged_file_list(self, repo_root: str | Path) -> tuple[Path, list[str]] | None:
         repo_root = Path(repo_root).expanduser().resolve()
         try:
             root_result = subprocess.run(
@@ -314,10 +338,69 @@ class RuleEngine:
                 text=True,
             )
         except (FileNotFoundError, OSError, subprocess.CalledProcessError):
-            return []
+            return None
 
         staged_paths = [line.strip() for line in result.stdout.splitlines() if line.strip()]
-        return self.scan_paths(git_root, staged_paths)
+        return git_root, staged_paths
+
+    def autofix_repository(self, repo_root: str | Path) -> list[str]:
+        repo_root = Path(repo_root).expanduser().resolve()
+        files = [path for path, _ in self._collect_files(repo_root)]
+        return self.autofix_paths(repo_root, files)
+
+    def autofix_staged_files(self, repo_root: str | Path) -> list[str]:
+        staged = self._staged_file_list(repo_root)
+        if staged is None:
+            return []
+        git_root, staged_paths = staged
+        return self.autofix_paths(git_root, staged_paths)
+
+    def autofix_paths(
+        self,
+        repo_root: str | Path,
+        file_paths: list[str | Path] | tuple[str | Path, ...] | set[str | Path],
+    ) -> list[str]:
+        repo_root = Path(repo_root).expanduser().resolve()
+        ignore_selectors = self._load_ignore_selectors(repo_root)
+        fixable_rules = [
+            rule
+            for rule in self.manifest.get("rules", [])
+            if rule.get("enabled", True) and rule.get("type") in FIXABLE_RULE_TYPES
+        ]
+        if not fixable_rules:
+            return []
+
+        changed: list[str] = []
+        for raw_path in file_paths:
+            if raw_path is None:
+                continue
+            candidate = Path(raw_path)
+            if not candidate.is_absolute():
+                candidate = (repo_root / candidate).resolve()
+            else:
+                candidate = candidate.expanduser().resolve()
+            if not candidate.exists() or not candidate.is_file():
+                continue
+            if ignore_selectors and self._is_ignored(repo_root, candidate, ignore_selectors):
+                continue
+            relative_path = self._relative_posix(repo_root, candidate)
+            try:
+                original = candidate.read_bytes().decode("utf-8")
+            except (UnicodeDecodeError, OSError):
+                continue
+            text = original
+            for rule in fixable_rules:
+                include_selectors = self._normalize_selectors(rule.get("include"))
+                exclude_selectors = self._normalize_selectors(rule.get("exclude"))
+                if include_selectors and not any(selector.match(relative_path) for selector in include_selectors):
+                    continue
+                if exclude_selectors and any(selector.match(relative_path) for selector in exclude_selectors):
+                    continue
+                text = FIXABLE_RULE_TYPES[rule["type"]](text)
+            if text != original:
+                candidate.write_bytes(text.encode("utf-8"))
+                changed.append(relative_path)
+        return sorted(changed)
 
     def _collect_files(self, repo_root: Path) -> list[tuple[Path, str]]:
         collected: list[tuple[Path, str]] = []

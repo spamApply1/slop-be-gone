@@ -26,6 +26,8 @@ self-hygiene manifest and a pre-commit hook loop.
 - Validates a manifest with `sbg validate`, and refuses to scan with broken
   policy (a `check` run fails fast if the manifest is malformed)
 - Supports staged-file checks with `sbg check --staged`
+- Can auto-fix the safe rules with `sbg check --fix` (trailing whitespace and
+  missing final newlines, preserving existing line endings)
 - Installs a pre-commit hook with `sbg install-hooks`
 - Supports one-command installer scripts for other repositories
 - Produces a human-readable report with `sbg report`
@@ -61,6 +63,13 @@ To enforce hygiene on staged changes before a commit:
 ```bash
 ./sbg install-hooks
 ./sbg check --staged .
+```
+
+To automatically fix the violations that support it (trailing whitespace and
+missing final newlines) before reporting the rest:
+
+```bash
+./sbg check . --fix
 ```
 
 To validate the active manifest without scanning files:

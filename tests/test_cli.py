@@ -228,5 +228,27 @@ class CLITests(unittest.TestCase):
             self.assertEqual(strict_code, 1)
 
 
+    def test_check_fix_repairs_fixable_violations(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_path = Path(temp_dir)
+            (repo_path / "sbg_manifest.json").write_text(
+                '{"rules": ['
+                '{"id": "trailing-whitespace", "type": "trailing-whitespace", "enabled": true},'
+                '{"id": "final-newline", "type": "final-newline", "enabled": true}'
+                ']}\n',
+                encoding="utf-8",
+            )
+            target = repo_path / "code.py"
+            target.write_text("x = 1   \nno_final = 2", encoding="utf-8")
+
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                exit_code = main(["check", str(repo_path), "--fix"])
+
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(target.read_text(encoding="utf-8"), "x = 1\nno_final = 2\n")
+            self.assertIn("Auto-fixed", stdout.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()
