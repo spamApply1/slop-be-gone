@@ -826,9 +826,12 @@ function renderViolations(violations) {
     card.className = "violation-card";
     card.setAttribute("data-action", "inspect-violation");
     const location = violation.line ? `${violation.path}:${violation.line}` : violation.path;
+    const severity = violation.severity === "warning" ? "warning" : "error";
+    card.classList.add(`severity-${severity}`);
     card.innerHTML = `
       <header>
         <span class="rule-id">${escapeHtml(violation.rule_id)}</span>
+        <span class="severity-badge severity-${severity}">${escapeHtml(severity)}</span>
         <span class="path">${escapeHtml(location)}</span>
       </header>
       <p class="message">${escapeHtml(violation.message)}</p>

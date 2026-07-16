@@ -316,6 +316,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
         summary = {
             "total": len(violations),
             "by_rule": dict(sorted(Counter(violation.rule_id for violation in violations).items())),
+            "by_severity": dict(sorted(Counter(violation.severity for violation in violations).items())),
         }
         response_payload = {
             "repo_root": str(repo_root),
