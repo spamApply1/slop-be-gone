@@ -126,14 +126,22 @@ def install_hooks(repo_root: str | Path, manifest: str | Path | None = None) -> 
             selected_manifest = (repo_root / selected_manifest).resolve()
 
     hook_path = hooks_dir / "pre-commit"
-    command = 'exec python3 -m sbg.cli check --staged "$repo_root"'
+    python_executable = shlex.quote(sys.executable)
+    command = f'exec {python_executable} -m sbg.cli check --staged "$repo_root"'
     if selected_manifest is not None:
         command += f" --manifest {shlex.quote(str(selected_manifest))}"
+
+    pythonpath_export = ""
+    src_dir = git_root / "src"
+    if src_dir.exists():
+        pythonpath_export = (
+            f'export PYTHONPATH={shlex.quote(str(src_dir))}${{PYTHONPATH:+:${{PYTHONPATH}}}}\n'
+        )
+
     hook_script = f"""#!/usr/bin/env bash
 set -euo pipefail
 repo_root={shlex.quote(str(git_root))}
-export PYTHONPATH=\"${{repo_root}}/src${{PYTHONPATH:+:${{PYTHONPATH}}}}\"
-{command}
+{pythonpath_export}{command}
 """
     hook_path.write_text(hook_script, encoding="utf-8")
     hook_path.chmod(0o755)

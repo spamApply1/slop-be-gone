@@ -17,6 +17,7 @@ self-hygiene manifest and a pre-commit hook loop.
 - Prints clear violations and exits non-zero when damage is detected
 - Supports staged-file checks with `sbg check --staged`
 - Installs a pre-commit hook with `sbg install-hooks`
+- Supports one-command installer scripts for other repositories
 - Produces a human-readable report with `sbg report`
 - Supports JSON output for automation and CI
 - Keeps the rule set easy to review, test, and extend
@@ -61,6 +62,29 @@ python3 -m pip install -e .
 
 See [docs/self-hygiene.md](docs/self-hygiene.md) for the full hook-based
 commit loop and the intended enterprise rollout.
+
+## Install SBG into another repository
+
+If you want to bring SBG to a different git repository, run one of the
+installer scripts in this checkout:
+
+```bash
+./scripts/install-sbg-hook.sh /path/to/target-repo
+./scripts/install-sbg-hook.sh /path/to/target-repo ./path/to/manifest.json
+```
+
+For PowerShell:
+
+```powershell
+pwsh -File .\scripts\install-sbg-hook.ps1 -TargetRepo C:\path\to\target-repo
+pwsh -File .\scripts\install-sbg-hook.ps1 -TargetRepo C:\path\to\target-repo -ManifestPath .\path\to\manifest.json
+```
+
+The scripts install SBG in editable mode into the current Python environment and
+then install a pre-commit hook into the target repository. The optional manifest
+path is passed through to SBG's hook installer. See
+[docs/hygiene-rules.md](docs/hygiene-rules.md) for a human-readable guide to the
+default rule set.
 
 ## Project layout
 

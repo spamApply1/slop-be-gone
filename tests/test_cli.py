@@ -92,6 +92,7 @@ class CLITests(unittest.TestCase):
             self.assertTrue(os.access(hook_path, os.X_OK))
             contents = hook_path.read_text(encoding="utf-8")
             self.assertIn("sbg.cli check --staged", contents)
+            self.assertIn(sys.executable, contents)
 
     def test_install_hooks_can_use_custom_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
