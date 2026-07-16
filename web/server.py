@@ -42,6 +42,92 @@ from sbg.manifest import load_concepts, resolve_manifest_path, write_manifest
 from sbg.script_maps import build_script_map
 
 
+_SUGGESTION_TABLE: list[tuple[tuple[str, ...], dict[str, Any]]] = [
+    (
+        ("todo", "fixme", "marker", "note"),
+        {
+            "id": "suggested-marker-spam",
+            "type": "marker-spam",
+            "enabled": True,
+            "pattern": "TO" + "DO",
+            "threshold": 3,
+            "match_mode": "plain_text",
+        },
+    ),
+    (
+        ("placeholder", "boilerplate", "sample", "lorem"),
+        {
+            "id": "suggested-placeholder",
+            "type": "placeholder-comments",
+            "enabled": True,
+            "pattern": "placeholder",
+            "match_mode": "plain_text",
+        },
+    ),
+    (
+        ("line length", "long line", "wrap", "readability"),
+        {"id": "suggested-long-lines", "type": "long-lines", "enabled": True, "max_length": 120},
+    ),
+    (
+        ("empty file", "blank file", "stub"),
+        {"id": "suggested-empty-files", "type": "empty-files", "enabled": True},
+    ),
+    (
+        ("large file", "oversized", "big file"),
+        {"id": "suggested-file-size", "type": "file-size", "enabled": True, "max_bytes": 1048576},
+    ),
+    (
+        ("secret", "credential", "api key", "token", "password"),
+        {"id": "suggested-secret-scan", "type": "secret-scan", "enabled": True},
+    ),
+    (
+        ("except", "eval", "exec", "mutable default", "ast", "complexity", "nesting"),
+        {"id": "suggested-python-bare-except", "type": "python-bare-except", "enabled": True},
+    ),
+    (
+        ("dynamic", "hard coded", "absolute path", "environment", "config", "portable"),
+        {"id": "suggested-dynamic-config", "type": "dynamic-config", "enabled": True},
+    ),
+    (
+        ("combine", "composite", "both", "either", "all of", "any of", "scoped", "group of"),
+        {
+            "id": "suggested-composite",
+            "type": "composite",
+            "enabled": True,
+            "match": ["src/**/*.py"],
+            "rules": [
+                {"type": "long-lines", "max_length": 120},
+                {"type": "placeholder-comments", "patterns": ["placeholder"]},
+            ],
+        },
+    ),
+]
+
+_DEFAULT_SUGGESTION: dict[str, Any] = {
+    "id": "suggested-placeholder",
+    "type": "placeholder-comments",
+    "enabled": True,
+    "pattern": "placeholder",
+    "match_mode": "plain_text",
+}
+
+
+def suggest_rule_for_prompt(prompt: str) -> dict[str, Any]:
+    """Map a free-text prompt to a starter rule using a keyword lookup table."""
+
+    prompt_lower = prompt.lower()
+    template = _DEFAULT_SUGGESTION
+    for tokens, candidate in _SUGGESTION_TABLE:
+        if any(token in prompt_lower for token in tokens):
+            template = candidate
+            break
+    rule = {key: (list(value) if isinstance(value, list) else value) for key, value in template.items()}
+    if rule.get("type") == "composite":
+        rule["logic"] = "any" if ("either" in prompt_lower or "any of" in prompt_lower) else "all"
+    rule["description"] = f"Suggested from prompt: {prompt}"
+    return rule
+
+
 class DashboardHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         self._handle_request()
@@ -208,101 +294,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
         if not prompt:
             self._send_json({"error": "prompt is required"})
             return
-        prompt_lower = prompt.lower()
-        if any(token in prompt_lower for token in ("todo", "fixme", "marker", "note")):
-            rule = {
-                "id": "suggested-marker-spam",
-                "type": "marker-spam",
-                "enabled": True,
-                "pattern": "TO" + "DO",
-                "threshold": 3,
-                "match_mode": "plain_text",
-                "description": f"Suggested from prompt: {prompt}",
-            }
-        elif any(token in prompt_lower for token in ("placeholder", "boilerplate", "sample", "lorem")):
-            rule = {
-                "id": "suggested-placeholder",
-                "type": "placeholder-comments",
-                "enabled": True,
-                "pattern": "placeholder",
-                "match_mode": "plain_text",
-                "description": f"Suggested from prompt: {prompt}",
-            }
-        elif any(token in prompt_lower for token in ("line length", "long line", "wrap", "readability")):
-            rule = {
-                "id": "suggested-long-lines",
-                "type": "long-lines",
-                "enabled": True,
-                "max_length": 120,
-                "match_mode": "plain_text",
-                "description": f"Suggested from prompt: {prompt}",
-            }
-        elif any(token in prompt_lower for token in ("empty file", "blank file", "stub")):
-            rule = {
-                "id": "suggested-empty-files",
-                "type": "empty-files",
-                "enabled": True,
-                "description": f"Suggested from prompt: {prompt}",
-            }
-        elif any(token in prompt_lower for token in ("large file", "oversized", "big file")):
-            rule = {
-                "id": "suggested-file-size",
-                "type": "file-size",
-                "enabled": True,
-                "max_bytes": 1048576,
-                "description": f"Suggested from prompt: {prompt}",
-            }
-        elif any(
-            token in prompt_lower
-            for token in (
-                "dynamic",
-                "hard coded",
-                "absolute path",
-                "environment",
-                "config",
-                "portable",
-            )
-        ):
-            rule = {
-                "id": "suggested-dynamic-config",
-                "type": "dynamic-config",
-                "enabled": True,
-                "description": f"Suggested from prompt: {prompt}",
-            }
-        elif any(
-            token in prompt_lower
-            for token in (
-                "combine",
-                "composite",
-                "both",
-                "either",
-                "all of",
-                "any of",
-                "scoped",
-                "group of",
-            )
-        ):
-            rule = {
-                "id": "suggested-composite",
-                "type": "composite",
-                "enabled": True,
-                "logic": "any" if ("either" in prompt_lower or "any of" in prompt_lower) else "all",
-                "match": ["src/**/*.py"],
-                "rules": [
-                    {"type": "long-lines", "max_length": 120},
-                    {"type": "placeholder-comments", "patterns": ["placeholder"]},
-                ],
-                "description": f"Suggested from prompt: {prompt}",
-            }
-        else:
-            rule = {
-                "id": "suggested-placeholder",
-                "type": "placeholder-comments",
-                "enabled": True,
-                "pattern": "placeholder",
-                "match_mode": "plain_text",
-                "description": f"Suggested from prompt: {prompt}",
-            }
+        rule = suggest_rule_for_prompt(prompt)
         self._send_json({"prompt": prompt, "rule": rule})
 
     def _scan_repository(self) -> None:
