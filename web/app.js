@@ -10,6 +10,9 @@ const commandmentsList = document.getElementById("commandments-list");
 const commandmentsCount = document.getElementById("commandments-count");
 const commandmentDetail = document.getElementById("commandment-detail");
 const manifestEditor = document.getElementById("manifest-editor");
+const assetMapList = document.getElementById("asset-map-list");
+const assetMapCount = document.getElementById("asset-map-count");
+const assetMapSummary = document.getElementById("asset-map-summary");
 const conceptsList = document.getElementById("concepts-list");
 const violationsList = document.getElementById("violations-list");
 const violationsCount = document.getElementById("violations-count");
@@ -33,10 +36,15 @@ const rulePromptInput = document.getElementById("rule-prompt");
 const suggestRuleButton = document.getElementById("suggest-rule");
 const patternPreviewList = document.getElementById("pattern-preview-list");
 const patternPreviewSummary = document.getElementById("pattern-preview-summary");
+const modalBackdrop = document.getElementById("detail-modal-backdrop");
+const modalTitle = document.getElementById("detail-modal-title");
+const modalBody = document.getElementById("detail-modal-body");
+const modalCloseButton = document.getElementById("detail-modal-close");
 
 let currentManifest = null;
 let currentViolations = [];
 let currentConcepts = [];
+let currentAssetMap = null;
 let selectedCommandment = null;
 
 function resolveApiUrl(path) {
@@ -67,6 +75,44 @@ function escapeHtml(text) {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/\"/g, "&quot;");
+}
+
+function openModal(title, contentHtml) {
+  if (!modalTitle || !modalBody || !modalBackdrop) {
+    return;
+  }
+  modalTitle.textContent = title;
+  modalBody.innerHTML = contentHtml;
+  modalBackdrop.classList.remove("hidden");
+  document.body.classList.add("modal-open");
+}
+
+function closeModal() {
+  if (!modalBackdrop || !modalBody || !modalTitle) {
+    return;
+  }
+  modalBackdrop.classList.add("hidden");
+  modalBody.innerHTML = "";
+  modalTitle.textContent = "";
+  document.body.classList.remove("modal-open");
+}
+
+function bindModalEvents() {
+  if (!modalCloseButton || modalCloseButton.dataset.sbgModalBound === "true") {
+    return;
+  }
+  modalCloseButton.dataset.sbgModalBound = "true";
+  modalCloseButton.addEventListener("click", closeModal);
+  modalBackdrop.addEventListener("click", (event) => {
+    if (event.target === modalBackdrop) {
+      closeModal();
+    }
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !modalBackdrop.classList.contains("hidden")) {
+      closeModal();
+    }
+  });
 }
 
 async function requestJson(path, options = {}) {
@@ -115,6 +161,264 @@ function renderManifestView(payload) {
   renderConcepts(currentConcepts);
 }
 
+function renderExplorerValue(value, depth = 0) {
+  if (value === null) {
+    return '<span class="explorer-scalar explorer-null">null</span>';
+  }
+  if (typeof value === "string") {
+    return `<span class="explorer-scalar explorer-string">&quot;${escapeHtml(value)}&quot;</span>`;
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return `<span class="explorer-scalar explorer-primitive">${escapeHtml(String(value))}</span>`;
+  }
+  if (Array.isArray(value)) {
+    if (!value.length) {
+      return '<div class="explorer-empty">Empty array</div>';
+    }
+    const children = value
+      .map((item, index) => {
+        const label = `[${index}]`;
+        return `
+          <div class="explorer-entry">
+            <span class="explorer-key">${escapeHtml(label)}</span>
+            <div class="explorer-entry-value">${renderExplorerValue(item, depth + 1)}</div>
+          </div>
+        `;
+      })
+      .join("");
+    return `
+      <details class="explorer-node explorer-array" ${depth < 2 ? "open" : ""}>
+        <summary>
+          <span class="explorer-label">Array</span>
+          <span class="explorer-meta">${value.length} item${value.length === 1 ? "" : "s"}</span>
+        </summary>
+        <div class="explorer-children">${children}</div>
+      </details>
+    `;
+  }
+  if (typeof value === "object") {
+    const entries = Object.entries(value);
+    if (!entries.length) {
+      return '<div class="explorer-empty">Empty object</div>';
+    }
+    const children = entries
+      .map(([key, child]) => `
+        <div class="explorer-entry">
+          <span class="explorer-key">${escapeHtml(key)}</span>
+          <div class="explorer-entry-value">${renderExplorerValue(child, depth + 1)}</div>
+        </div>
+      `)
+      .join("");
+    return `
+      <details class="explorer-node explorer-object" ${depth < 2 ? "open" : ""}>
+        <summary>
+          <span class="explorer-label">Object</span>
+          <span class="explorer-meta">${entries.length} field${entries.length === 1 ? "" : "s"}</span>
+        </summary>
+        <div class="explorer-children">${children}</div>
+      </details>
+    `;
+  }
+  return `<span class="explorer-scalar">${escapeHtml(String(value))}</span>`;
+}
+
+function buildBridgeContextForPath(path) {
+  if (!path || !currentAssetMap || !Array.isArray(currentAssetMap.nodes)) {
+    return null;
+  }
+  const normalizedPath = String(path).replace(/\\/g, "/").replace(/^\.\//, "");
+  const node = currentAssetMap.nodes.find((candidate) => candidate.id === `file:${normalizedPath}`);
+  if (!node) {
+    return null;
+  }
+  const relatedEdges = (currentAssetMap.edges || []).filter(
+    (edge) => edge.from === node.id || edge.to === node.id,
+  );
+  return { node, related_edges: relatedEdges };
+}
+
+function renderBridgeContext(bridgeContext) {
+  if (!bridgeContext || !bridgeContext.node) {
+    return "";
+  }
+  const node = bridgeContext.node;
+  const relatedEdges = Array.isArray(bridgeContext.related_edges) ? bridgeContext.related_edges : [];
+  const linkMarkup = relatedEdges.length
+    ? relatedEdges
+        .map((edge) => {
+          const targetNode = (currentAssetMap && Array.isArray(currentAssetMap.nodes)
+            ? currentAssetMap.nodes.find((candidate) => candidate.id === edge.to || candidate.id === edge.from)
+            : null) || null;
+          const label = targetNode && targetNode.id !== node.id ? targetNode.label : edge.kind;
+          return `<div class="bridge-link">${escapeHtml(edge.kind)} → ${escapeHtml(label)}</div>`;
+        })
+        .join("")
+    : '<div class="bridge-link">No related edges</div>';
+  return `
+    <div class="bridge-context">
+      <h4>Bridge context</h4>
+      <div class="bridge-node">
+        <strong>${escapeHtml(node.label)}</strong>
+        <span>${escapeHtml(node.kind)}</span>
+      </div>
+      <div class="bridge-links">${linkMarkup}</div>
+    </div>
+  `;
+}
+
+function renderExplorerContent(data) {
+  const bridgeContext = data && data.bridge_context ? data.bridge_context : null;
+  const displayData = data && typeof data === "object" ? { ...data } : data;
+  if (displayData && typeof displayData === "object") {
+    delete displayData.bridge_context;
+  }
+  return `
+    <div class="explorer-shell">
+      ${bridgeContext ? renderBridgeContext(bridgeContext) : ""}
+      ${renderExplorerValue(displayData)}
+    </div>
+  `;
+}
+
+function renderSourceViewContent(payload, rule = null, path = null) {
+  const lines = String(payload && payload.content ? payload.content : "").split(/\r?\n/);
+  const renderedLines = lines.length
+    ? lines
+        .map((line, index) => `
+          <div class="source-line">
+            <span class="source-line-number">${index + 1}</span>
+            <pre class="source-line-text">${escapeHtml(line)}</pre>
+          </div>
+        `)
+        .join("")
+    : '<div class="empty-state">No source content was returned.</div>';
+  const bridgeContext = path ? buildBridgeContextForPath(path) : null;
+  const bridgeBlock = bridgeContext ? renderBridgeContext(bridgeContext) : "";
+  const ruleBlock = rule
+    ? `<div class="explorer-shell">${renderExplorerValue({ rule })}</div>`
+    : "";
+  return `
+    <div class="modal-stack">
+      <div class="explorer-summary">${escapeHtml(payload && payload.path ? payload.path : "Source")}</div>
+      ${bridgeBlock}
+      ${ruleBlock}
+      <div class="source-view-block">${renderedLines}</div>
+    </div>
+  `;
+}
+
+function openExplorerModal(title, data, options = {}) {
+  const summary = options.summary ? `<div class="explorer-summary">${escapeHtml(options.summary)}</div>` : "";
+  const meta = options.meta ? `<div class="explorer-meta-line">${escapeHtml(options.meta)}</div>` : "";
+  const footer = options.footer ? `<div class="explorer-footer">${options.footer}</div>` : "";
+  openModal(
+    title,
+    `
+      <div class="modal-stack">
+        <div class="panel-header">
+          <h3>${escapeHtml(title)}</h3>
+          <span class="count-pill">${escapeHtml(options.kind || "raw data")}</span>
+        </div>
+        ${meta}
+        ${summary}
+        ${renderExplorerContent(data)}
+        ${footer}
+      </div>
+    `,
+  );
+}
+
+function renderCommandmentDetail(rule) {
+  if (!rule) {
+    closeModal();
+    return;
+  }
+
+  const patternValue = rule.pattern || (rule.patterns ? rule.patterns.join(", ") : "");
+  const title = rule.id || rule.type || "Commandment";
+  const explorerData = {
+    rule,
+    repo_root: repoPathInput.value.trim() || ".",
+    manifest_path: manifestPathInput.value.trim() || (currentManifest && currentManifest.manifest_path) || null,
+    bridge_context: bridgeContext,
+  };
+  const sourceRefs = Array.isArray(rule.source_refs) ? rule.source_refs : [];
+  const bridgeRef = sourceRefs.find((sourceRef) => sourceRef && sourceRef.path && !sourceRef.path.startsWith("docs/"));
+  const bridgeContext = buildBridgeContextForPath(bridgeRef && bridgeRef.path ? bridgeRef.path : null);
+  const sourceLinks = sourceRefs.length
+    ? `
+      <div class="source-link-row">
+        ${sourceRefs
+          .map((sourceRef) => {
+            const label = sourceRef.label || sourceRef.path || "Source";
+            return `
+              <button
+                type="button"
+                class="secondary"
+                data-action="open-rule-source"
+                data-source-path="${escapeHtml(sourceRef.path || "") }"
+                data-source-label="${escapeHtml(label)}"
+                data-source-kind="${escapeHtml(sourceRef.kind || "file") }"
+                data-rule-id="${escapeHtml(rule.id || "") }"
+              >
+                ${escapeHtml(label)}
+              </button>
+            `;
+          })
+          .join("")}
+      </div>
+    `
+    : "";
+  openModal(
+    title,
+    `
+      <div class="modal-stack">
+        <div class="panel-header">
+          <h3>${escapeHtml(title)}</h3>
+          <span class="count-pill">${escapeHtml(rule.type || "custom")}</span>
+        </div>
+        <div class="explorer-summary">${escapeHtml(rule.description || `Rule type ${rule.type || "custom"}`)}</div>
+        <div class="rule-doc-grid">
+          <div class="rule-doc-card">
+            <h4>What</h4>
+            <p>${escapeHtml(rule.what || "This rule is intended to keep the repository consistent and reviewable.")}</p>
+          </div>
+          <div class="rule-doc-card">
+            <h4>Why</h4>
+            <p>${escapeHtml(rule.why || "This rule prevents low-value patterns from drifting into the codebase.")}</p>
+          </div>
+        </div>
+        ${sourceLinks}
+        <div class="deep-dive-card">
+          <label for="detail-rule-id">
+            <span>Rule id</span>
+            <input id="detail-rule-id" type="text" value="${escapeHtml(rule.id || "")}">
+          </label>
+          <label for="detail-rule-description">
+            <span>Description</span>
+            <textarea id="detail-rule-description" rows="3">${escapeHtml(rule.description || "")}</textarea>
+          </label>
+          <label for="detail-rule-pattern">
+            <span>Pattern text</span>
+            <input id="detail-rule-pattern" type="text" value="${escapeHtml(patternValue)}">
+          </label>
+          <label for="detail-rule-enabled">
+            <span>Enabled</span>
+            <input id="detail-rule-enabled" type="checkbox" ${rule.enabled === false ? "" : "checked"}>
+          </label>
+          <div class="detail-actions">
+            <button type="button" id="detail-save" class="secondary" data-action="save-commandment-detail">Save edit</button>
+            <button type="button" id="detail-close" data-action="close-commandment-detail">Close</button>
+          </div>
+        </div>
+        ${renderExplorerContent(explorerData)}
+      </div>
+    `,
+  );
+
+  bindButtonActions(modalBody);
+}
+
 function renderCommandments(rules) {
   commandmentsList.innerHTML = "";
   commandmentsCount.textContent = `${rules.length} rule${rules.length === 1 ? "" : "s"}`;
@@ -137,32 +441,62 @@ function renderCommandments(rules) {
           : rule.max_bytes
             ? `max_bytes: ${escapeHtml(rule.max_bytes)}`
             : "custom rule";
+    const what = escapeHtml(rule.what || rule.description || `Rule type ${rule.type || "custom"}`);
+    const why = escapeHtml(rule.why || "This rule keeps the repository consistent and reviewable.");
+    const sourceRefs = Array.isArray(rule.source_refs) ? rule.source_refs : [];
+    const sourceButtons = sourceRefs.length
+      ? sourceRefs
+          .map((sourceRef) => {
+            const label = sourceRef.label || sourceRef.path || "Source";
+            return `
+              <button
+                type="button"
+                class="secondary source-link"
+                data-action="open-rule-source"
+                data-source-path="${escapeHtml(sourceRef.path || "") }"
+                data-source-label="${escapeHtml(label)}"
+                data-source-kind="${escapeHtml(sourceRef.kind || "file") }"
+                data-rule-id="${escapeHtml(rule.id || "") }"
+              >
+                ${escapeHtml(label)}
+              </button>
+            `;
+          })
+          .join("")
+      : "";
     const isActive = selectedCommandment && selectedCommandment.id === rule.id;
     const cardClasses = `commandment-card${isActive ? " active" : ""}`;
     return `
-      <button type="button" class="${cardClasses}" data-rule-id="${escapeHtml(rule.id || "")}">
+      <article
+        class="${cardClasses}"
+        role="button"
+        tabindex="0"
+        data-action="select-commandment"
+        data-rule-id="${escapeHtml(rule.id || "") }"
+      >
         <header>
           <span class="rule-id">${ruleId}</span>
           <span class="meta">${escapeHtml(status)}</span>
         </header>
         <p>${description}</p>
         <div class="meta">${detail}</div>
-      </button>
+        <div class="rule-doc-grid compact">
+          <div class="rule-doc-card">
+            <h4>What</h4>
+            <p>${what}</p>
+          </div>
+          <div class="rule-doc-card">
+            <h4>Why</h4>
+            <p>${why}</p>
+          </div>
+        </div>
+        ${sourceButtons ? `<div class="source-link-row">${sourceButtons}</div>` : ""}
+      </article>
     `;
   });
   commandmentsList.innerHTML = cards.join("");
 
-  const buttons = commandmentsList.querySelectorAll(".commandment-card");
-  buttons.forEach((button) => {
-    button.addEventListener("click", () => {
-      const ruleId = button.getAttribute("data-rule-id");
-      const rule = rules.find((candidate) => candidate.id === ruleId);
-      if (rule) {
-        selectedCommandment = rule;
-        renderCommandments(rules);
-      }
-    });
-  });
+  bindButtonActions(commandmentsList);
 
   if (selectedCommandment) {
     const activeRule = rules.find((candidate) => candidate.id === selectedCommandment.id);
@@ -170,82 +504,6 @@ function renderCommandments(rules) {
       renderCommandmentDetail(activeRule);
     }
   }
-}
-
-function renderCommandmentDetail(rule) {
-  if (!rule) {
-    commandmentDetail.classList.add("hidden");
-    commandmentDetail.innerHTML = "";
-    return;
-  }
-
-  commandmentDetail.classList.remove("hidden");
-  const patternValue = rule.pattern || (rule.patterns ? rule.patterns.join(", ") : "");
-  commandmentDetail.innerHTML = `
-    <div class="panel-header">
-      <h3>${escapeHtml(rule.id || rule.type || "Commandment")}</h3>
-      <span class="count-pill">${escapeHtml(rule.type || "custom")}</span>
-    </div>
-    <label>
-      <span>Rule id</span>
-      <input id="detail-rule-id" type="text" value="${escapeHtml(rule.id || "")}">
-    </label>
-    <label>
-      <span>Description</span>
-      <textarea id="detail-rule-description" rows="3">${escapeHtml(rule.description || "")}</textarea>
-    </label>
-    <label>
-      <span>Pattern text</span>
-      <input id="detail-rule-pattern" type="text" value="${escapeHtml(patternValue)}">
-    </label>
-    <label>
-      <span>Enabled</span>
-      <input id="detail-rule-enabled" type="checkbox" ${rule.enabled === false ? "" : "checked"}>
-    </label>
-    <div class="detail-actions">
-      <button type="button" id="detail-save" class="secondary">Save edit</button>
-      <button type="button" id="detail-close">Close</button>
-    </div>
-  `;
-
-  const saveButton = commandmentDetail.querySelector("#detail-save");
-  saveButton.addEventListener("click", () => {
-    const updatedRules = (
-      currentManifest && currentManifest.manifest && Array.isArray(currentManifest.manifest.rules)
-        ? currentManifest.manifest.rules
-        : []
-    ).map((candidate) => {
-      if (candidate.id !== rule.id) {
-        return candidate;
-      }
-      const nextId = commandmentDetail.querySelector("#detail-rule-id").value.trim() || candidate.id;
-      return {
-        ...candidate,
-        id: nextId,
-        description: commandmentDetail.querySelector("#detail-rule-description").value.trim(),
-        pattern: commandmentDetail.querySelector("#detail-rule-pattern").value.trim(),
-        enabled: commandmentDetail.querySelector("#detail-rule-enabled").checked,
-      };
-    });
-    if (currentManifest && currentManifest.manifest) {
-      currentManifest.manifest.rules = updatedRules;
-      manifestEditor.value = JSON.stringify(currentManifest.manifest, null, 2);
-      const nextId = commandmentDetail.querySelector("#detail-rule-id").value.trim();
-      selectedCommandment = updatedRules.find((candidate) => candidate.id === nextId) || null;
-      renderCommandments(updatedRules);
-      setStatus("Commandment updated in editor view.", "success");
-    }
-  });
-
-  const closeButton = commandmentDetail.querySelector("#detail-close");
-  closeButton.addEventListener("click", () => {
-    selectedCommandment = null;
-    renderCommandments(
-      currentManifest && currentManifest.manifest && Array.isArray(currentManifest.manifest.rules)
-        ? currentManifest.manifest.rules
-        : []
-    );
-  });
 }
 
 function renderConcepts(concepts) {
@@ -258,6 +516,8 @@ function renderConcepts(concepts) {
   for (const concept of concepts) {
     const card = document.createElement("article");
     card.className = "concept-card";
+    card.setAttribute("role", "button");
+    card.tabIndex = 0;
     card.innerHTML = `
       <header>
         <h3>${escapeHtml(concept.title || concept.id || "Concept")}</h3>
@@ -266,25 +526,57 @@ function renderConcepts(concepts) {
       <p>${escapeHtml(concept.description || "")}</p>
       <div class="meta">${escapeHtml(concept.rule_kind || "custom")}</div>
       <div class="concept-actions">
-        <button type="button" class="secondary concept-load">Load</button>
-        <button type="button" class="concept-freeze">Freeze</button>
+        <button
+          type="button"
+          class="secondary concept-load"
+          data-action="load-concept"
+          data-concept-id="${escapeHtml(concept.id || concept.title || "")}"
+        >
+          Load
+        </button>
+        <button
+          type="button"
+          class="concept-freeze"
+          data-action="freeze-concept"
+          data-concept-id="${escapeHtml(concept.id || concept.title || "")}"
+        >
+          Freeze
+        </button>
       </div>
     `;
 
-    const loadButton = card.querySelector(".concept-load");
-    loadButton.addEventListener("click", () => {
-      setPatternFormFromConcept(concept);
-      setStatus(`Loaded concept ${concept.id || concept.title}.`, "success");
+    card.addEventListener("click", (event) => {
+      if (event.target.closest("button")) {
+        return;
+      }
+      openExplorerModal(
+        concept.title || concept.id || "Concept",
+        { concept, repo_root: repoPathInput.value.trim() || "." },
+        {
+          kind: "concept",
+          summary: concept.description || "",
+          meta: concept.rule_kind || "custom",
+        },
+      );
     });
-
-    const freezeButton = card.querySelector(".concept-freeze");
-    freezeButton.addEventListener("click", () => {
-      setPatternFormFromConcept(concept);
-      void savePattern(concept);
+    card.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        openExplorerModal(
+          concept.title || concept.id || "Concept",
+          { concept, repo_root: repoPathInput.value.trim() || "." },
+          {
+            kind: "concept",
+            summary: concept.description || "",
+            meta: concept.rule_kind || "custom",
+          },
+        );
+      }
     });
 
     conceptsList.appendChild(card);
   }
+  bindButtonActions(conceptsList);
 }
 
 function setPatternFormFromConcept(concept) {
@@ -339,6 +631,149 @@ function validatePatternPayload(payload) {
   return null;
 }
 
+function getCurrentRules() {
+  if (currentManifest && currentManifest.manifest && Array.isArray(currentManifest.manifest.rules)) {
+    return currentManifest.manifest.rules;
+  }
+  return [];
+}
+
+async function openRuleSource(button) {
+  const sourcePath = button.getAttribute("data-source-path");
+  const sourceLabel = button.getAttribute("data-source-label") || sourcePath || "Source";
+  const ruleId = button.getAttribute("data-rule-id");
+  const rules = getCurrentRules();
+  const rule = rules.find((candidate) => candidate.id === ruleId) || null;
+  try {
+    const payload = await requestJson("/api/source-view", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        repo_root: repoPathInput.value.trim() || ".",
+        manifest_path: manifestPathInput.value.trim() || (currentManifest && currentManifest.manifest_path) || null,
+        path: sourcePath,
+      }),
+    });
+    openModal(sourceLabel, renderSourceViewContent(payload, rule, sourcePath));
+    bindButtonActions(modalBody);
+  } catch (error) {
+    openModal(sourceLabel, `<div class="empty-state">Unable to load ${escapeHtml(sourcePath || "source")}: ${escapeHtml(error.message)}</div>`);
+  }
+}
+
+function bindActionButton(button) {
+  if (!button || button.dataset.sbgBound === "true") {
+    return;
+  }
+  button.dataset.sbgBound = "true";
+  button.addEventListener("click", (event) => {
+    const action = button.getAttribute("data-action");
+    if (!action) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    if (action === "scan-repository") {
+      void scanRepository();
+      return;
+    }
+    if (action === "refresh-manifest") {
+      void loadManifest();
+      return;
+    }
+    if (action === "suggest-rule") {
+      void suggestRule();
+      return;
+    }
+    if (action === "preview-pattern") {
+      void previewPattern();
+      return;
+    }
+    if (action === "save-pattern") {
+      void savePattern();
+      return;
+    }
+    if (action === "save-manifest") {
+      void saveManifest();
+      return;
+    }
+    if (action === "open-rule-source") {
+      void openRuleSource(button);
+      return;
+    }
+    if (action === "select-commandment") {
+      const ruleId = button.getAttribute("data-rule-id");
+      const rules = getCurrentRules();
+      const rule = rules.find((candidate) => candidate.id === ruleId);
+      if (rule) {
+        selectedCommandment = rule;
+        renderCommandments(rules);
+      }
+      return;
+    }
+    if (action === "save-commandment-detail") {
+      const rules = getCurrentRules();
+      const detailRoot = modalBody && modalBody.querySelector("#detail-rule-id") ? modalBody : commandmentDetail;
+      const updatedRules = rules.map((candidate) => {
+        if (candidate.id !== selectedCommandment?.id) {
+          return candidate;
+        }
+        const nextId = detailRoot.querySelector("#detail-rule-id").value.trim() || candidate.id;
+        return {
+          ...candidate,
+          id: nextId,
+          description: detailRoot.querySelector("#detail-rule-description").value.trim(),
+          pattern: detailRoot.querySelector("#detail-rule-pattern").value.trim(),
+          enabled: detailRoot.querySelector("#detail-rule-enabled").checked,
+        };
+      });
+      if (currentManifest && currentManifest.manifest) {
+        currentManifest.manifest.rules = updatedRules;
+        manifestEditor.value = JSON.stringify(currentManifest.manifest, null, 2);
+        const nextId = detailRoot.querySelector("#detail-rule-id").value.trim();
+        selectedCommandment = updatedRules.find((candidate) => candidate.id === nextId) || null;
+        renderCommandments(updatedRules);
+        closeModal();
+        setStatus("Commandment updated in editor view.", "success");
+      }
+      return;
+    }
+    if (action === "close-commandment-detail") {
+      closeModal();
+      selectedCommandment = null;
+      renderCommandments(getCurrentRules());
+      return;
+    }
+    if (action === "load-concept") {
+      const conceptId = button.getAttribute("data-concept-id");
+      const concept = currentConcepts.find(
+        (candidate) => (candidate.id || candidate.title || "") === conceptId
+      );
+      if (concept) {
+        setPatternFormFromConcept(concept);
+        setStatus(`Loaded concept ${concept.id || concept.title}.`, "success");
+      }
+      return;
+    }
+    if (action === "freeze-concept") {
+      const conceptId = button.getAttribute("data-concept-id");
+      const concept = currentConcepts.find(
+        (candidate) => (candidate.id || candidate.title || "") === conceptId
+      );
+      if (concept) {
+        setPatternFormFromConcept(concept);
+        void savePattern(concept);
+      }
+    }
+  });
+}
+
+function bindButtonActions(root = document) {
+  root.querySelectorAll("[data-action]").forEach((button) => {
+    bindActionButton(button);
+  });
+}
+
 function renderSummary(summary) {
   summaryList.innerHTML = "";
   if (!summary || summary.total === 0) {
@@ -372,6 +807,7 @@ function renderViolations(violations) {
     const card = document.createElement("button");
     card.type = "button";
     card.className = "violation-card";
+    card.setAttribute("data-action", "inspect-violation");
     const location = violation.line ? `${violation.path}:${violation.line}` : violation.path;
     card.innerHTML = `
       <header>
@@ -397,9 +833,29 @@ async function showViolationContext(violation) {
       }),
     });
     renderViolationContext(payload);
+    const bridgeContext = buildBridgeContextForPath(payload.path || violation.path);
+    openExplorerModal(
+      violation.rule_id || "Violation",
+      { violation, context: payload, bridge_context: bridgeContext },
+      {
+        kind: "violation",
+        summary: `${payload.path || violation.path}${payload.line ? `:${payload.line}` : ""}`,
+        meta: violation.message || "",
+      },
+    );
     setStatus(`Context loaded for ${violation.path}.`, "success");
   } catch (error) {
     renderViolationContext({ path: violation.path, line: violation.line || null, lines: [] });
+    const bridgeContext = buildBridgeContextForPath(violation.path);
+    openExplorerModal(
+      violation.rule_id || "Violation",
+      { violation, context: { path: violation.path, line: violation.line || null, lines: [] }, bridge_context: bridgeContext },
+      {
+        kind: "violation",
+        summary: violation.path || "Unknown path",
+        meta: error.message,
+      },
+    );
     setStatus(`Unable to load context: ${error.message}`, "error");
   }
 }
@@ -454,6 +910,90 @@ function renderPatternPreview(payload) {
   patternPreviewList.innerHTML = items.join("");
 }
 
+function renderAssetMap(graph) {
+  currentAssetMap = graph || { nodes: [], edges: [] };
+  const nodes = Array.isArray(currentAssetMap.nodes) ? currentAssetMap.nodes : [];
+  const edges = Array.isArray(currentAssetMap.edges) ? currentAssetMap.edges : [];
+  assetMapCount.textContent = `${edges.length} link${edges.length === 1 ? "" : "s"}`;
+  if (!nodes.length) {
+    assetMapList.innerHTML = '<div class="empty-state">No asset relationships were discovered.</div>';
+    assetMapSummary.textContent = "No asset map available.";
+    return;
+  }
+
+  const edgesBySource = new Map();
+  for (const edge of edges) {
+    const bucket = edgesBySource.get(edge.from) || [];
+    bucket.push(edge);
+    edgesBySource.set(edge.from, bucket);
+  }
+
+  assetMapSummary.textContent = (
+    `Mapped ${nodes.length} assets and ${edges.length} links into a synthetic view of the dashboard.`
+  );
+  assetMapList.innerHTML = "";
+  for (const node of nodes) {
+    const relatedEdges = edges.filter((edge) => edge.from === node.id || edge.to === node.id);
+    const links = (edgesBySource.get(node.id) || []).map((edge) => {
+      const target = nodes.find((candidate) => candidate.id === edge.to);
+      const label = target ? target.label : edge.to;
+      return `<div class="asset-link">${escapeHtml(edge.kind)} → ${escapeHtml(label)}</div>`;
+    });
+    const card = document.createElement("article");
+    card.className = "asset-map-card";
+    card.setAttribute("role", "button");
+    card.tabIndex = 0;
+    card.innerHTML = `
+      <header>
+        <h3>${escapeHtml(node.label)}</h3>
+        <span class="count-pill">${escapeHtml(node.kind)}</span>
+      </header>
+      <div class="asset-map-links">
+        ${links.length ? links.join("") : '<div class="asset-link">No outgoing links</div>'}
+      </div>
+    `;
+    card.addEventListener("click", (event) => {
+      if (event.target.closest("button")) {
+        return;
+      }
+      openExplorerModal(
+        node.label || node.id || "Asset",
+        { node, related_edges: relatedEdges },
+        {
+          kind: "asset map",
+          summary: `${relatedEdges.length} related link${relatedEdges.length === 1 ? "" : "s"}`,
+          meta: node.kind || "asset",
+        },
+      );
+    });
+    card.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        openExplorerModal(
+          node.label || node.id || "Asset",
+          { node, related_edges: relatedEdges },
+          {
+            kind: "asset map",
+            summary: `${relatedEdges.length} related link${relatedEdges.length === 1 ? "" : "s"}`,
+            meta: node.kind || "asset",
+          },
+        );
+      }
+    });
+    assetMapList.appendChild(card);
+  }
+}
+
+async function loadAssetMap() {
+  try {
+    const payload = await requestJson("/api/asset-map");
+    renderAssetMap(payload);
+  } catch (error) {
+    renderAssetMap({ nodes: [], edges: [] });
+    assetMapSummary.textContent = `Unable to load asset map: ${error.message}`;
+  }
+}
+
 function togglePanels() {
   summaryPanel.classList.toggle("hidden", !showSummaryCheckbox.checked);
   manifestPanel.classList.toggle("hidden", !showManifestCheckbox.checked);
@@ -461,9 +1001,39 @@ function togglePanels() {
 
 showSummaryCheckbox.addEventListener("change", togglePanels);
 showManifestCheckbox.addEventListener("change", togglePanels);
-refreshManifestButton.addEventListener("click", loadManifest);
 
-suggestRuleButton.addEventListener("click", async () => {
+async function scanRepository() {
+  const repoRoot = repoPathInput.value.trim() || ".";
+  const manifestPath = manifestPathInput.value.trim();
+
+  setStatus("Scanning repository…");
+  try {
+    const payload = await requestJson("/api/scan", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        repo_root: repoRoot,
+        manifest_path: manifestPath || null,
+      }),
+    });
+
+    renderViolations(payload.violations || []);
+    renderSummary(payload.summary || { total: 0, by_rule: {} });
+    if (currentManifest) {
+      renderManifestView(currentManifest);
+    }
+    const fileLabel = payload.violation_count === 1 ? "finding" : "findings";
+    const summaryMessage = `Scan complete. ${payload.violation_count} ${fileLabel} across ${payload.repo_root}.`;
+    setStatus(summaryMessage, payload.violation_count ? "error" : "success");
+    togglePanels();
+  } catch (error) {
+    renderViolations([]);
+    renderSummary({ total: 0, by_rule: {} });
+    setStatus(`Scan failed: ${error.message}`, "error");
+  }
+}
+
+async function suggestRule() {
   const prompt = rulePromptInput.value.trim();
   if (!prompt) {
     setStatus("Describe the slop pattern you want to freeze before suggesting a rule.", "error");
@@ -490,9 +1060,9 @@ suggestRuleButton.addEventListener("click", async () => {
   } catch (error) {
     setStatus(`Unable to suggest a rule: ${error.message}`, "error");
   }
-});
+}
 
-saveManifestButton.addEventListener("click", async () => {
+async function saveManifest() {
   const repoRoot = repoPathInput.value.trim() || ".";
   const manifestPath = manifestPathInput.value.trim() || (currentManifest && currentManifest.manifest_path) || null;
   let manifestPayload = null;
@@ -528,7 +1098,7 @@ saveManifestButton.addEventListener("click", async () => {
   } catch (error) {
     setStatus(`Unable to save manifest: ${error.message}`, "error");
   }
-});
+}
 
 async function previewPattern() {
   const payload = buildPatternPayload();
@@ -615,45 +1185,13 @@ async function savePattern(concept = null) {
   }
 }
 
-previewPatternButton.addEventListener("click", () => {
-  void previewPattern();
-});
-
-savePatternButton.addEventListener("click", () => {
-  void savePattern();
-});
-
-form.addEventListener("submit", async (event) => {
+form.addEventListener("submit", (event) => {
   event.preventDefault();
-  const repoRoot = repoPathInput.value.trim() || ".";
-  const manifestPath = manifestPathInput.value.trim();
-
-  setStatus("Scanning repository…");
-  try {
-    const payload = await requestJson("/api/scan", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        repo_root: repoRoot,
-        manifest_path: manifestPath || null,
-      }),
-    });
-
-    renderViolations(payload.violations || []);
-    renderSummary(payload.summary || { total: 0, by_rule: {} });
-    if (currentManifest) {
-      renderManifestView(currentManifest);
-    }
-    const fileLabel = payload.violation_count === 1 ? "finding" : "findings";
-    const summaryMessage = `Scan complete. ${payload.violation_count} ${fileLabel} across ${payload.repo_root}.`;
-    setStatus(summaryMessage, payload.violation_count ? "error" : "success");
-    togglePanels();
-  } catch (error) {
-    renderViolations([]);
-    renderSummary({ total: 0, by_rule: {} });
-    setStatus(`Scan failed: ${error.message}`, "error");
-  }
+  void scanRepository();
 });
 
+bindModalEvents();
+bindButtonActions();
+void loadAssetMap();
 loadManifest();
 togglePanels();

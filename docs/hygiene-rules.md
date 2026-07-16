@@ -4,7 +4,7 @@ SBG ships with a small default rule set that is intentionally opinionated. Each
 rule is meant to catch a class of low-value or risky changes before they become
 part of a commit.
 
-## 1. scaffold-leftovers
+## 1. placeholder-comments
 
 What it catches:
 - Comments that look like unfinished work, such as "fill in later" or
@@ -85,7 +85,27 @@ Bad pattern:
 payload = {"user_id": user_id, "role": role, "status": status, "active": active, "name": name}
 ```
 
-## 5. button-types
+## 5. button-actions
+
+What it catches:
+- Buttons that lack an explicit action hook such as `data-action` or `onclick`.
+
+Why it matters:
+- A button without an explicit action is ambiguous. It looks interactive but does
+  not communicate which behavior it is supposed to trigger, which makes generated
+  UI harder to trust and review.
+
+Good pattern:
+```html
+<button type="button" data-action="save">Save</button>
+```
+
+Bad pattern:
+```html
+<button>Save</button>
+```
+
+## 6. button-types
 
 What it catches:
 - Buttons that omit an explicit `type` attribute or declare a non-standard type.
@@ -105,7 +125,7 @@ Bad pattern:
 <button>Cancel</button>
 ```
 
-## 6. form-labels
+## 7. form-labels
 
 What it catches:
 - Form controls that lack a clear label or accessible name.
@@ -125,7 +145,7 @@ Bad pattern:
 <input name="email" />
 ```
 
-## 7. file-size
+## 8. file-size
 
 What it catches:
 - Files that grow beyond the configured size threshold, which defaults to 1 MiB.
@@ -144,6 +164,121 @@ Bad pattern:
 ```text
 A generated JSON payload that is hundreds of kilobytes long and committed as a
 single source file.
+```
+
+## 9. asset-links
+
+What it catches:
+- Front-end actions declared in HTML that are not linked from the client-side
+  script that is supposed to handle them.
+
+Why it matters:
+- A UI action that is not wired to a handler is a synthetic dead-end. It looks
+  like the interface is complete while leaving the system with invisible gaps that
+  are easy to miss in review.
+
+Good pattern:
+```html
+<button type="button" data-action="save">Save</button>
+```
+
+```javascript
+if (action === "save") {
+  void saveDocument();
+}
+```
+
+Bad pattern:
+```html
+<button type="button" data-action="save">Save</button>
+```
+
+```javascript
+// no corresponding action branch exists
+```
+
+## 10. fully-defined-rules
+
+What it catches:
+- Rule definitions that do not include the metadata needed to explain, inspect, or
+  trace them.
+
+Why it matters:
+- A rule without a description, a clear what/why explanation, or source references
+  is effectively invisible policy. It cannot be reviewed or trusted, and it invites
+  future slop because the policy itself is not anchored in the repository.
+
+Good pattern:
+```json
+{
+  "id": "fully-defined-rules",
+  "type": "fully-defined-rules",
+  "description": "Freeze rule definitions that are not fully explainable.",
+  "what": "Require every rule to include human-readable context.",
+  "why": "This keeps the policy self-explanatory and easier to maintain.",
+  "source_refs": [{"path": "docs/hygiene-rules.md"}]
+}
+```
+
+Bad pattern:
+```json
+{
+  "id": "fully-defined-rules",
+  "type": "fully-defined-rules"
+}
+```
+
+## 11. source-loadable
+
+What it catches:
+- Rule source references that do not resolve to a file the dashboard can read.
+
+Why it matters:
+- If a policy points to a missing or unreadable file, the rule becomes opaque. The
+  repository loses the traceability and reviewability that the UI is supposed to
+  provide.
+
+Good pattern:
+```json
+{
+  "id": "source-loadable",
+  "type": "source-loadable",
+  "description": "Freeze source references that cannot be loaded.",
+  "what": "Require every source reference to resolve to a readable file.",
+  "why": "This keeps the policy inspectable from the same UI it is meant to defend.",
+  "source_refs": [{"path": "docs/hygiene-rules.md"}]
+}
+```
+
+Bad pattern:
+```json
+{
+  "id": "source-loadable",
+  "type": "source-loadable",
+  "source_refs": [{"path": "docs/missing.md"}]
+}
+```
+
+## 12. dynamic-config
+
+What it catches:
+- Hard-coded absolute paths or loopback endpoints in code, manifests, and other
+  config-like files.
+
+Why it matters:
+- Hard-coded machine-specific values make the framework brittle. A repo that works
+  only on one filesystem or one localhost port is not actually reusable.
+
+Good pattern:
+```python
+host = os.environ.get("SBG_WEB_HOST") or "127.0.0.1"
+repo_root = Path(os.environ.get("SBG_REPO_ROOT") or ".").resolve()
+```
+
+Bad pattern:
+```python
+ROOT = "/home/tekjanson/project"
+endpoint = "http://localhost:8000"
 ```
 
 ## How to use this guide

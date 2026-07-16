@@ -11,6 +11,22 @@
         "replace me",
         "change me",
         "sample content"
+      ],
+      "description": "Freeze placeholder comments and scaffold leftovers inside the SBG repo.",
+      "what": "Catch placeholder comments and scaffold leftovers before they harden into self-hygiene debt.",
+      "why": "These patterns often indicate unfinished work or copied scaffolding that weakens the credibility of the framework itself.",
+      "source_refs": [
+        {
+          "label": "Rule guide",
+          "path": "docs/hygiene-rules.md",
+          "kind": "doc",
+          "anchor": "placeholder-comments"
+        },
+        {
+          "label": "Rule source",
+          "path": "sbg_self_manifest.json",
+          "kind": "manifest"
+        }
       ]
     },
     {
@@ -18,24 +34,193 @@
       "type": "marker-spam",
       "enabled": true,
       "patterns": ["TODO", "FIXME", "XXX"],
-      "threshold": 5
+      "threshold": 5,
+      "description": "Freeze marker-heavy comments in self-hygiene scans.",
+      "what": "Catch repeated TODO/FIXME/XXX markers that dilute the signal of real implementation notes.",
+      "why": "Marker spam accumulates debt quickly when it is allowed to sit in the repository without cleanup.",
+      "source_refs": [
+        {
+          "label": "Rule guide",
+          "path": "docs/hygiene-rules.md",
+          "kind": "doc",
+          "anchor": "marker-spam"
+        },
+        {
+          "label": "Rule source",
+          "path": "sbg_self_manifest.json",
+          "kind": "manifest"
+        }
+      ]
     },
     {
       "id": "self-empty-files",
       "type": "empty-files",
-      "enabled": true
+      "enabled": true,
+      "description": "Freeze empty or whitespace-only files in the SBG repo.",
+      "what": "Require every file to carry meaning instead of acting as an empty placeholder.",
+      "why": "An empty file is usually a sign that a change was started and abandoned.",
+      "source_refs": [
+        {
+          "label": "Rule guide",
+          "path": "docs/hygiene-rules.md",
+          "kind": "doc",
+          "anchor": "empty-files"
+        },
+        {
+          "label": "Rule source",
+          "path": "sbg_self_manifest.json",
+          "kind": "manifest"
+        }
+      ]
     },
     {
       "id": "self-long-lines",
       "type": "long-lines",
       "enabled": true,
-      "max_length": 120
+      "max_length": 120,
+      "description": "Freeze long lines in self-hygiene checks.",
+      "what": "Keep implementation readable by refusing runs of dense code that are difficult to review.",
+      "why": "Long lines make it harder to reason about the edifice that the framework itself is supposed to enforce.",
+      "source_refs": [
+        {
+          "label": "Rule guide",
+          "path": "docs/hygiene-rules.md",
+          "kind": "doc",
+          "anchor": "long-lines"
+        },
+        {
+          "label": "Rule source",
+          "path": "sbg_self_manifest.json",
+          "kind": "manifest"
+        }
+      ]
+    },
+    {
+      "id": "self-button-actions",
+      "type": "button-actions",
+      "enabled": true,
+      "description": "Freeze UI buttons with no explicit action hook in SBG itself.",
+      "what": "Require every button in the dashboard and supporting UI to expose a concrete action.",
+      "why": "Buttons without a traceable action are the exact sort of invisible slop the framework should police.",
+      "source_refs": [
+        {
+          "label": "Rule guide",
+          "path": "docs/hygiene-rules.md",
+          "kind": "doc",
+          "anchor": "button-actions"
+        },
+        {
+          "label": "Rule source",
+          "path": "sbg_self_manifest.json",
+          "kind": "manifest"
+        }
+      ]
+    },
+    {
+      "id": "self-asset-links",
+      "type": "asset-links",
+      "enabled": true,
+      "description": "Freeze missing bridge links between UI declarations and handlers.",
+      "what": "Require the self-hygiene dashboard to expose a clear bridge between markup and handlers.",
+      "why": "The framework should be able to inspect its own UI structure and ensure the bridge remains honest.",
+      "source_refs": [
+        {
+          "label": "Rule guide",
+          "path": "docs/hygiene-rules.md",
+          "kind": "doc",
+          "anchor": "asset-links"
+        },
+        {
+          "label": "Rule source",
+          "path": "sbg_self_manifest.json",
+          "kind": "manifest"
+        }
+      ]
     },
     {
       "id": "self-file-size",
       "type": "file-size",
       "enabled": true,
-      "max_bytes": 1048576
+      "max_bytes": 1048576,
+      "description": "Freeze oversized files in the SBG repository.",
+      "what": "Reject files that have grown too large to remain easy to review and maintain.",
+      "why": "The self-hygiene framework should not allow one file to become an unreviewable monolith.",
+      "source_refs": [
+        {
+          "label": "Rule guide",
+          "path": "docs/hygiene-rules.md",
+          "kind": "doc",
+          "anchor": "file-size"
+        },
+        {
+          "label": "Rule source",
+          "path": "sbg_self_manifest.json",
+          "kind": "manifest"
+        }
+      ]
+    },
+    {
+      "id": "self-fully-defined-rules",
+      "type": "fully-defined-rules",
+      "enabled": true,
+      "description": "Freeze self-hygiene rules that lack the metadata needed to inspect or explain them.",
+      "what": "Require the repository's own hygiene manifest to carry the full explanation layers required for human and AI review.",
+      "why": "The framework should not be allowed to enforce a policy that it cannot explain or trace back to source.",
+      "source_refs": [
+        {
+          "label": "Rule guide",
+          "path": "docs/hygiene-rules.md",
+          "kind": "doc",
+          "anchor": "fully-defined-rules"
+        },
+        {
+          "label": "Rule source",
+          "path": "sbg_self_manifest.json",
+          "kind": "manifest"
+        }
+      ]
+    },
+    {
+      "id": "self-source-loadable",
+      "type": "source-loadable",
+      "enabled": true,
+      "description": "Freeze self-hygiene rules that point to source files the dashboard cannot read.",
+      "what": "Require every source reference inside the self-hygiene manifest to resolve to a readable file.",
+      "why": "The framework should not be allowed to prescribe a policy that cannot be inspected from the same UI it exposes.",
+      "source_refs": [
+        {
+          "label": "Rule guide",
+          "path": "docs/hygiene-rules.md",
+          "kind": "doc",
+          "anchor": "source-loadable"
+        },
+        {
+          "label": "Rule source",
+          "path": "sbg_self_manifest.json",
+          "kind": "manifest"
+        }
+      ]
+    },
+    {
+      "id": "self-dynamic-config",
+      "type": "dynamic-config",
+      "enabled": true,
+      "description": "Freeze self-hygiene changes that reintroduce machine-specific paths or local endpoints into the framework.",
+      "what": "Require SBG's own code and config to resolve environment-specific values dynamically rather than baking them into source.",
+      "why": "The framework should model the portability it is meant to enforce instead of relying on one machine's filesystem layout.",
+      "source_refs": [
+        {
+          "label": "Rule guide",
+          "path": "docs/hygiene-rules.md",
+          "kind": "doc",
+          "anchor": "dynamic-config"
+        },
+        {
+          "label": "Rule source",
+          "path": "sbg_self_manifest.json",
+          "kind": "manifest"
+        }
+      ]
     }
   ]
 }

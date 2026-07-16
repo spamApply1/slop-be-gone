@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from collections import Counter
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -37,6 +38,7 @@ def resolve_default_repo_root() -> Path:
 
 from sbg.engine import RuleEngine
 from sbg.manifest import load_concepts, resolve_manifest_path, write_manifest
+from sbg.script_maps import build_script_map
 
 
 class DashboardHandler(BaseHTTPRequestHandler):
@@ -63,6 +65,12 @@ class DashboardHandler(BaseHTTPRequestHandler):
             return
         if path == "/api/concepts":
             self._serve_concepts()
+            return
+        if path == "/api/asset-map":
+            self._serve_asset_map()
+            return
+        if path == "/api/source-view":
+            self._serve_source_view()
             return
         if path == "/api/rule-suggest":
             self._serve_rule_suggest()
@@ -112,6 +120,39 @@ class DashboardHandler(BaseHTTPRequestHandler):
             "default_repo_root": str(resolve_default_repo_root()),
         }
         self._send_json(payload)
+
+    def _serve_asset_map(self) -> None:
+        repo_root = resolve_default_repo_root()
+        asset_graph = self._build_asset_graph(repo_root)
+        self._send_json(asset_graph)
+
+    def _serve_source_view(self) -> None:
+        payload = self._read_json_payload()
+        repo_root = self._resolve_repo_root(payload.get("repo_root"))
+        source_path = payload.get("path")
+        if not source_path:
+            self._send_json({"error": "path is required"})
+            return
+        manifest_path = self._resolve_manifest_path(payload.get("manifest_path"), repo_root=repo_root)
+        resolved_path = self._resolve_source_path(repo_root, manifest_path, source_path)
+        if resolved_path is None:
+            self._send_json({"error": "source file not found"})
+            return
+        try:
+            content = resolved_path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            content = resolved_path.read_text(encoding="utf-8", errors="replace")
+        relative_path = self._display_path_for(resolved_path, repo_root, manifest_path)
+        self._send_json({
+            "path": relative_path,
+            "content": content,
+            "line_count": len(content.splitlines()),
+        })
+
+    def _build_asset_graph(self, repo_root: Path) -> dict[str, Any]:
+        web_root = repo_root / "web"
+        scope_path = web_root if web_root.exists() else repo_root
+        return build_script_map(repo_root, scope_path=scope_path)
 
     def _serve_manifest_save(self) -> None:
         payload = self._read_json_payload()
@@ -181,6 +222,13 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 "type": "file-size",
                 "enabled": True,
                 "max_bytes": 1048576,
+                "description": f"Suggested from prompt: {prompt}",
+            }
+        elif any(token in prompt_lower for token in ("dynamic", "hard coded", "absolute path", "environment", "config", "portable")):
+            rule = {
+                "id": "suggested-dynamic-config",
+                "type": "dynamic-config",
+                "enabled": True,
                 "description": f"Suggested from prompt: {prompt}",
             }
         else:
@@ -366,6 +414,46 @@ class DashboardHandler(BaseHTTPRequestHandler):
         if not candidate.is_absolute():
             candidate = (repo_root / candidate).resolve()
         return candidate.resolve()
+
+    def _resolve_source_path(self, repo_root: Path, manifest_path: Path | None, source_path: str | Path) -> Path | None:
+        candidate = Path(source_path).expanduser()
+        if candidate.is_absolute():
+            candidate = candidate.resolve()
+            if candidate.exists() and candidate.is_file() and self._is_path_within(candidate, repo_root, manifest_path):
+                return candidate
+            return None
+
+        repo_candidate = (repo_root / candidate).resolve()
+        if repo_candidate.exists() and repo_candidate.is_file():
+            return repo_candidate
+
+        if manifest_path is not None:
+            manifest_candidate = (manifest_path.parent / candidate).resolve()
+            if manifest_candidate.exists() and manifest_candidate.is_file():
+                return manifest_candidate
+
+        return None
+
+    def _display_path_for(self, resolved_path: Path, repo_root: Path, manifest_path: Path | None) -> str:
+        for base in [repo_root.resolve(), manifest_path.parent.resolve() if manifest_path is not None else None]:
+            if base is None:
+                continue
+            try:
+                return resolved_path.relative_to(base).as_posix()
+            except ValueError:
+                continue
+        return resolved_path.as_posix()
+
+    def _is_path_within(self, candidate: Path, repo_root: Path, manifest_path: Path | None) -> bool:
+        for base in [repo_root.resolve(), manifest_path.parent.resolve() if manifest_path is not None else None]:
+            if base is None:
+                continue
+            try:
+                candidate.relative_to(base)
+                return True
+            except ValueError:
+                continue
+        return False
 
     def _read_json_payload(self) -> dict[str, Any]:
         try:

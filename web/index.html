@@ -28,19 +28,24 @@
           <input id="manifest-path" name="manifest-path" type="text" placeholder="leave blank for the default manifest">
 
           <div class="checkbox-row">
-            <label class="checkbox-pill">
+            <label class="checkbox-pill" for="show-summary">
               <input id="show-summary" type="checkbox" checked>
               <span>Show summary</span>
             </label>
-            <label class="checkbox-pill">
+            <label class="checkbox-pill" for="show-manifest">
               <input id="show-manifest" type="checkbox">
               <span>Show current manifest</span>
             </label>
           </div>
 
           <div class="button-row">
-            <button type="submit">Scan repository</button>
-            <button type="button" id="refresh-manifest" class="secondary">Refresh manifest</button>
+            <button type="submit" data-action="scan-repository">Scan repository</button>
+            <button
+              type="button"
+              id="refresh-manifest"
+              class="secondary"
+              data-action="refresh-manifest"
+            >Refresh manifest</button>
           </div>
         </form>
 
@@ -53,7 +58,9 @@
             placeholder="Describe the slop pattern you want to freeze."
           ></textarea>
           <div class="button-row">
-            <button type="button" id="suggest-rule" class="secondary">Suggest rule</button>
+            <button type="button" id="suggest-rule" class="secondary" data-action="suggest-rule">
+              Suggest rule
+            </button>
           </div>
         </div>
 
@@ -65,7 +72,7 @@
           <input id="pattern-text" name="pattern-text" type="text" placeholder="e.g. TODO or ^TODO">
 
           <div class="pattern-meta-row">
-            <label class="select-field">
+            <label class="select-field" for="pattern-kind">
               <span>Rule kind</span>
               <select id="pattern-kind">
                 <option value="placeholder-comments">placeholder-comments</option>
@@ -75,7 +82,7 @@
                 <option value="file-size">file-size</option>
               </select>
             </label>
-            <label class="select-field">
+            <label class="select-field" for="pattern-type">
               <span>Match mode</span>
               <select id="pattern-type">
                 <option value="plain_text">Plain text</option>
@@ -93,15 +100,15 @@
           ></textarea>
 
           <div class="pattern-meta-row">
-            <label class="select-field">
+            <label class="select-field" for="threshold-input">
               <span>Threshold</span>
               <input id="threshold-input" name="threshold" type="number" min="1" value="3">
             </label>
-            <label class="select-field">
+            <label class="select-field" for="max-length-input">
               <span>Max length</span>
               <input id="max-length-input" name="max-length" type="number" min="1" value="120">
             </label>
-            <label class="select-field">
+            <label class="select-field" for="max-bytes-input">
               <span>Max bytes</span>
               <input id="max-bytes-input" name="max-bytes" type="number" min="1" value="1048576">
             </label>
@@ -116,8 +123,13 @@
           >
 
           <div class="button-row">
-            <button type="button" id="preview-pattern" class="secondary">Preview pattern</button>
-            <button type="button" id="save-pattern">Save pattern</button>
+            <button
+              type="button"
+              id="preview-pattern"
+              class="secondary"
+              data-action="preview-pattern"
+            >Preview pattern</button>
+            <button type="button" id="save-pattern" data-action="save-pattern">Save pattern</button>
           </div>
 
           <div id="pattern-preview-summary" class="substatus">No preview yet.</div>
@@ -145,9 +157,20 @@
           <label for="manifest-editor">Manifest JSON</label>
           <textarea id="manifest-editor" class="manifest-editor" spellcheck="false"></textarea>
           <div class="button-row">
-            <button type="button" id="save-manifest" class="secondary">Save manifest</button>
+            <button type="button" id="save-manifest" class="secondary" data-action="save-manifest">
+              Save manifest
+            </button>
           </div>
         </section>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Asset linkage map</h2>
+          <span id="asset-map-count" class="count-pill">0 links</span>
+        </div>
+        <div id="asset-map-summary" class="substatus">Loading asset map…</div>
+        <div id="asset-map-list" class="asset-map-list"></div>
       </section>
 
       <section class="panel">
@@ -171,6 +194,16 @@
         </div>
         <div id="violations-list" class="violations-list"></div>
       </section>
+    </div>
+
+    <div id="detail-modal-backdrop" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h2 id="detail-modal-title">Detail</h2>
+          <button type="button" id="detail-modal-close" class="secondary" data-action="close-commandment-detail">Close</button>
+        </div>
+        <div id="detail-modal-body" class="modal-body"></div>
+      </div>
     </div>
 
     <script src="app.js"></script>

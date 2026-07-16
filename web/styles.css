@@ -23,6 +23,10 @@ body {
   min-height: 100vh;
 }
 
+body.modal-open {
+  overflow: hidden;
+}
+
 .app-shell {
   max-width: 1180px;
   margin: 0 auto;
@@ -280,7 +284,8 @@ button.secondary {
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.commandment-card {
+.commandment-card,
+.concept-card {
   cursor: pointer;
 }
 
@@ -309,6 +314,277 @@ button.secondary {
   display: flex;
   gap: 0.6rem;
   flex-wrap: wrap;
+}
+
+.deep-dive-card {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.explorer-summary,
+.explorer-meta-line,
+.explorer-footer {
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.explorer-shell {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.explorer-node {
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  overflow: hidden;
+}
+
+.explorer-node summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  cursor: pointer;
+  padding: 0.8rem 0.95rem;
+  list-style: none;
+}
+
+.explorer-node summary::-webkit-details-marker {
+  display: none;
+}
+
+.explorer-label {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.explorer-meta {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.explorer-children {
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.2rem 0.95rem 0.95rem;
+}
+
+.explorer-entry {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.7rem 0.8rem;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.explorer-key {
+  color: var(--accent);
+  font-weight: 700;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 0.9rem;
+}
+
+.explorer-entry-value {
+  color: var(--text);
+}
+
+.explorer-scalar {
+  display: inline-block;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.explorer-string {
+  color: #aee8ff;
+}
+
+.explorer-null {
+  color: var(--muted);
+}
+
+.explorer-primitive {
+  color: #c7ffc9;
+}
+
+.explorer-empty {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.bridge-context {
+  display: grid;
+  gap: 0.6rem;
+  padding: 0.95rem 1rem;
+  border-radius: 16px;
+  background: rgba(124, 156, 255, 0.1);
+  border: 1px solid rgba(124, 156, 255, 0.2);
+}
+
+.bridge-node {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--text);
+}
+
+.bridge-node span {
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.78rem;
+}
+
+.bridge-links {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.bridge-link {
+  padding: 0.65rem 0.8rem;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--muted);
+  font-size: 0.93rem;
+}
+
+.source-view-block {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.95rem 1rem;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  max-height: 420px;
+  overflow: auto;
+}
+
+.source-line {
+  display: grid;
+  grid-template-columns: 54px 1fr;
+  gap: 0.75rem;
+  align-items: start;
+}
+
+.source-line-number {
+  color: var(--accent);
+  text-align: right;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 0.92rem;
+}
+
+.source-line-text {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 0.92rem;
+  color: var(--text);
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(2, 7, 17, 0.78);
+  backdrop-filter: blur(10px);
+}
+
+.modal-card {
+  width: min(720px, 100%);
+  max-height: min(88vh, 100%);
+  overflow: auto;
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(7, 17, 31, 0.96);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+  padding: 1.2rem;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.modal-header h2 {
+  margin: 0;
+  color: var(--text);
+}
+
+.modal-body {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.modal-stack {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.modal-stack label {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.modal-stack input[type="checkbox"] {
+  width: auto;
+  margin-top: 0.2rem;
+}
+
+.rule-doc-grid {
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.rule-doc-grid.compact {
+  gap: 0.55rem;
+}
+
+.rule-doc-card {
+  display: grid;
+  gap: 0.3rem;
+  padding: 0.85rem 0.95rem;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.rule-doc-card h4 {
+  margin: 0;
+  color: var(--accent);
+  font-size: 0.95rem;
+}
+
+.rule-doc-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.source-link-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.source-link-row button {
+  padding: 0.65rem 0.9rem;
 }
 
 .commandment-card header,
@@ -345,6 +621,50 @@ button.secondary {
 
 .concept-actions button {
   padding: 0.6rem 0.9rem;
+}
+
+.asset-map-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.asset-map-card {
+  padding: 0.95rem 1rem;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+}
+
+.asset-map-card:hover {
+  border-color: rgba(124, 156, 255, 0.35);
+  box-shadow: inset 0 0 0 1px rgba(124, 156, 255, 0.16);
+}
+
+.asset-map-card header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.55rem;
+}
+
+.asset-map-card h3 {
+  color: var(--accent);
+  margin: 0;
+}
+
+.asset-map-links {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.asset-link {
+  padding: 0.6rem 0.8rem;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--muted);
+  font-size: 0.94rem;
 }
 
 .violations-list {

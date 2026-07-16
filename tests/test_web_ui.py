@@ -69,6 +69,52 @@ class WebUITests(unittest.TestCase):
         self.assertTrue(response["concepts"])
         self.assertIn("id", response["concepts"][0])
 
+    def test_source_view_endpoint_returns_file_contents(self) -> None:
+        status, body = self._request(
+            "/api/source-view",
+            method="POST",
+            payload={"repo_root": str(ROOT), "path": "docs/hygiene-rules.md"},
+        )
+        self.assertEqual(status, 200)
+        response = json.loads(body)
+        self.assertEqual(response["path"], "docs/hygiene-rules.md")
+        self.assertIn("What it catches:", response["content"])
+
+    def test_source_view_endpoint_resolves_manifest_relative_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = Path(temp_dir)
+            isolated_repo = repo_root / "other-repo"
+            isolated_repo.mkdir(parents=True, exist_ok=True)
+            manifest_dir = repo_root / "manifest-root"
+            manifest_dir.mkdir(parents=True, exist_ok=True)
+            (manifest_dir / "docs").mkdir(parents=True, exist_ok=True)
+            (manifest_dir / "docs" / "guide.md").write_text("# Guide\n", encoding="utf-8")
+            manifest_path = manifest_dir / "sbg_manifest.json"
+            manifest_path.write_text(json.dumps({"rules": []}), encoding="utf-8")
+
+            status, body = self._request(
+                "/api/source-view",
+                method="POST",
+                payload={
+                    "repo_root": str(isolated_repo),
+                    "manifest_path": str(manifest_path),
+                    "path": "docs/guide.md",
+                },
+            )
+            self.assertEqual(status, 200)
+            response = json.loads(body)
+            self.assertEqual(response["path"], "docs/guide.md")
+            self.assertEqual(response["content"], "# Guide\n")
+
+    def test_asset_map_endpoint_returns_link_graph(self) -> None:
+        status, body = self._request("/api/asset-map")
+        self.assertEqual(status, 200)
+        response = json.loads(body)
+        self.assertIn("nodes", response)
+        self.assertIn("edges", response)
+        self.assertTrue(response["nodes"])
+        self.assertGreaterEqual(response["summary"]["edge_count"], 1)
+
     def test_manifest_save_endpoint_writes_json(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             manifest_path = Path(temp_dir) / "custom_manifest.json"

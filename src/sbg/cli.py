@@ -10,6 +10,7 @@ from typing import Any
 
 from .engine import RuleEngine
 from .manifest import resolve_manifest_path
+from .script_maps import build_script_map
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -48,6 +49,10 @@ def build_parser() -> argparse.ArgumentParser:
     report_parser = subparsers.add_parser("report")
     report_parser.add_argument("repo_root", help="repository root to scan")
     report_parser.add_argument("--manifest", dest="manifest", default=None, help="path to a custom manifest")
+
+    script_map_parser = subparsers.add_parser("script-map")
+    script_map_parser.add_argument("repo_root", nargs="?", default=".", help="repository root to analyze")
+    script_map_parser.add_argument("--output", dest="output", default=None, help="write the script map JSON to a file")
     return parser
 
 
@@ -61,6 +66,8 @@ def main(argv: list[str] | None = None) -> int:
         return install_hooks(args.repo_root, args.manifest)
     if args.command == "report":
         return run_report(args)
+    if args.command == "script-map":
+        return run_script_map(args)
 
     parser.error("unsupported command")
 
@@ -173,6 +180,20 @@ def run_report(args: argparse.Namespace) -> int:
             print(f"  - {location}: {violation.message}")
         print(f"  Suggestion: {suggestion_for_rule(rule_id)}")
     return 1
+
+
+def run_script_map(args: argparse.Namespace) -> int:
+    repo_root = Path(args.repo_root).expanduser().resolve()
+    payload = build_script_map(repo_root)
+    if args.output:
+        output_path = Path(args.output).expanduser()
+        if not output_path.is_absolute():
+            output_path = (Path.cwd() / output_path).resolve()
+        output_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        print(f"Wrote script map to {output_path}")
+    else:
+        print(json.dumps(payload, indent=2))
+    return 0
 
 
 def suggestion_for_rule(rule_id: str) -> str:

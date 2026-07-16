@@ -47,6 +47,28 @@
       "examples": ["A long one-liner that should be wrapped or refactored."]
     },
     {
+      "id": "button-actions",
+      "title": "Actionful buttons",
+      "category": "design",
+      "description": "Freeze the UI convention that every button must declare an explicit action hook.",
+      "rule_kind": "button-actions",
+      "pattern_name": "button-actions",
+      "pattern_text": "",
+      "pattern_type": "plain_text",
+      "examples": ["<button data-action=\"save\">", "<button onclick=\"save()\">"]
+    },
+    {
+      "id": "asset-links",
+      "title": "Linked front-end assets",
+      "category": "design",
+      "description": "Freeze the convention that UI actions declared in markup must be linked from client-side handlers so the interface remains legible and reviewable.",
+      "rule_kind": "asset-links",
+      "pattern_name": "asset-links",
+      "pattern_text": "",
+      "pattern_type": "plain_text",
+      "examples": ["<button data-action=\"save\">", "if (action === \"save\") { ... }"]
+    },
+    {
       "id": "button-types",
       "title": "Explicit button types",
       "category": "design",
@@ -90,6 +112,39 @@
       "pattern_text": "",
       "pattern_type": "plain_text",
       "examples": ["An empty stub file that needs content."]
+    },
+    {
+      "id": "defined-rules",
+      "title": "Fully defined rules",
+      "category": "policy",
+      "description": "Freeze the policy convention that every rule must be fully explainable and traceable.",
+      "rule_kind": "fully-defined-rules",
+      "pattern_name": "defined-rules",
+      "pattern_text": "",
+      "pattern_type": "plain_text",
+      "examples": ["A rule with description, what, why, and source_refs metadata."]
+    },
+    {
+      "id": "source-loadable",
+      "title": "Loadable source refs",
+      "category": "policy",
+      "description": "Freeze the convention that every rule source reference must resolve to a readable file.",
+      "rule_kind": "source-loadable",
+      "pattern_name": "source-loadable",
+      "pattern_text": "",
+      "pattern_type": "plain_text",
+      "examples": ["A rule that points to docs/hygiene-rules.md or sbg_manifest.json."]
+    },
+    {
+      "id": "dynamic-config",
+      "title": "Dynamic configuration",
+      "category": "policy",
+      "description": "Freeze the convention that code and manifests should rely on runtime-derived values instead of machine-specific hard-coded paths.",
+      "rule_kind": "dynamic-config",
+      "pattern_name": "dynamic-config",
+      "pattern_text": "",
+      "pattern_type": "plain_text",
+      "examples": ["A config value that uses environment variables or runtime discovery instead of /home/… or http://localhost:8000."]
     }
   ]
 }

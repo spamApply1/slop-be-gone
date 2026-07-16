@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import re
 import subprocess
@@ -54,7 +55,7 @@ class RuleEngine:
     def scan_repository(self, repo_root: str | Path) -> list[Violation]:
         repo_root = Path(repo_root).expanduser().resolve()
         files = self._collect_files(repo_root)
-        return self.scan_paths(repo_root, (path for path, _ in files))
+        return self.scan_paths(repo_root, [path for path, _ in files])
 
     def scan_paths(
         self,
@@ -64,6 +65,7 @@ class RuleEngine:
         repo_root = Path(repo_root).expanduser().resolve()
         violations: list[Violation] = []
         rules = [rule for rule in self.manifest.get("rules", []) if rule.get("enabled", True)]
+        repo_context = self._build_repo_context(repo_root, file_paths)
 
         for raw_path in file_paths:
             if raw_path is None:
@@ -82,7 +84,17 @@ class RuleEngine:
             file_size = candidate.stat().st_size
             content = self._read_text(candidate)
             for rule in rules:
-                violations.extend(self._apply_rule(rule, repo_root, candidate, relative_path, content, file_size))
+                violations.extend(
+                    self._apply_rule(
+                        rule,
+                        repo_root,
+                        candidate,
+                        relative_path,
+                        content,
+                        file_size,
+                        repo_context,
+                    )
+                )
 
         return sorted(violations, key=lambda violation: (violation.path, violation.line or 0, violation.rule_id))
 
@@ -126,6 +138,29 @@ class RuleEngine:
         except UnicodeDecodeError:
             return None
 
+    def _build_repo_context(
+        self,
+        repo_root: Path,
+        file_paths: list[str | Path] | tuple[str | Path, ...] | set[str | Path],
+    ) -> dict[str, Any]:
+        context: dict[str, Any] = {"files": {}}
+        for raw_path in file_paths:
+            if raw_path is None:
+                continue
+            candidate = Path(raw_path)
+            if not candidate.is_absolute():
+                candidate = (repo_root / candidate).resolve()
+            else:
+                candidate = candidate.expanduser().resolve()
+            if not candidate.exists() or not candidate.is_file():
+                continue
+            try:
+                relative_path = candidate.relative_to(repo_root).as_posix()
+            except ValueError:
+                relative_path = candidate.as_posix()
+            context["files"][relative_path] = self._read_text(candidate)
+        return context
+
     def _apply_rule(
         self,
         rule: dict[str, Any],
@@ -134,6 +169,7 @@ class RuleEngine:
         relative_path: str,
         content: str | None,
         file_size: int,
+        repo_context: dict[str, Any] | None = None,
     ) -> list[Violation]:
         rule_type = rule.get("type")
         rule_id = rule.get("id", rule_type)
@@ -147,11 +183,242 @@ class RuleEngine:
             return self._apply_long_lines(rule, relative_path, content, rule_id)
         if rule_type == "file-size":
             return self._apply_file_size(rule, relative_path, file_size, rule_id)
+        if rule_type == "button-actions":
+            return self._apply_button_actions(rule, relative_path, content, rule_id)
         if rule_type == "button-types":
             return self._apply_button_types(rule, relative_path, content, rule_id)
         if rule_type == "form-labels":
             return self._apply_form_labels(rule, relative_path, content, rule_id)
+        if rule_type == "asset-links":
+            return self._apply_asset_links(rule, relative_path, content, rule_id, repo_context)
+        if rule_type == "fully-defined-rules":
+            return self._apply_fully_defined_rules(rule, relative_path, content, rule_id)
+        if rule_type == "source-loadable":
+            return self._apply_source_loadable(rule, repo_root, relative_path, content, rule_id)
+        if rule_type == "dynamic-config":
+            return self._apply_dynamic_config(rule, relative_path, content, rule_id)
         return []
+
+    def _apply_dynamic_config(
+        self,
+        rule: dict[str, Any],
+        relative_path: str,
+        content: str | None,
+        rule_id: str,
+    ) -> list[Violation]:
+        del rule
+        if content is None:
+            return []
+        if not self._is_dynamic_config_candidate(relative_path):
+            return []
+
+        patterns = [
+            (re.compile(r"(?<![A-Za-z0-9_./-])/(?:home|Users|tmp|var|opt|etc|srv|mnt|private|Volumes|Applications|Library)(?:/|\\)", re.IGNORECASE), "absolute filesystem path"),
+            (re.compile(r"(?<![A-Za-z0-9_./-])~(?:/|\\)", re.IGNORECASE), "home-relative path"),
+            (re.compile(r"(?<![A-Za-z0-9_./-])[A-Za-z]:\\(?:Users|Program Files|Program Files \(x86\)|Windows|Temp|tmp|Documents|Desktop|Library)(?:\\|/)", re.IGNORECASE), "absolute Windows path"),
+            (re.compile(r"(?<![A-Za-z0-9_./-])https?://(?:127\.0\.0\.1|localhost)(?::\d+)?(?:/|$)", re.IGNORECASE), "loopback endpoint"),
+        ]
+
+        violations: list[Violation] = []
+        for line_number, line in enumerate(content.splitlines(), start=1):
+            stripped = line.strip()
+            if not stripped:
+                continue
+            for pattern, label in patterns:
+                if pattern.search(stripped):
+                    violations.append(
+                        Violation(
+                            rule_id=rule_id,
+                            path=relative_path,
+                            line=line_number,
+                            message=f"hard-coded {label} found: {stripped}",
+                        )
+                    )
+                    break
+        return violations
+
+    def _is_dynamic_config_candidate(self, relative_path: str) -> bool:
+        suffixes = {
+            ".py",
+            ".json",
+            ".js",
+            ".ts",
+            ".tsx",
+            ".jsx",
+            ".yml",
+            ".yaml",
+            ".toml",
+            ".ini",
+            ".cfg",
+            ".sh",
+            ".txt",
+            ".md",
+            ".html",
+            ".css",
+            ".vue",
+            ".cjs",
+            ".mjs",
+            ".rb",
+            ".go",
+            ".java",
+            ".php",
+            ".swift",
+            ".kt",
+            ".rs",
+        }
+        path = Path(relative_path)
+        if path.suffix.lower() in suffixes:
+            return True
+        return path.name.lower() in {"dockerfile", "makefile", "procfile", "readme"}
+
+    def _apply_source_loadable(
+        self,
+        rule: dict[str, Any],
+        repo_root: Path,
+        relative_path: str,
+        content: str | None,
+        rule_id: str,
+    ) -> list[Violation]:
+        del rule
+        if content is None:
+            return []
+        try:
+            payload = json.loads(content)
+        except json.JSONDecodeError:
+            return []
+        if not isinstance(payload, dict):
+            return []
+        rules = payload.get("rules")
+        if not isinstance(rules, list):
+            return []
+
+        violations: list[Violation] = []
+        for index, candidate in enumerate(rules):
+            if not isinstance(candidate, dict):
+                continue
+            rule_name = str(candidate.get("id") or candidate.get("type") or f"rule-{index + 1}")
+            source_refs = candidate.get("source_refs")
+            if not isinstance(source_refs, list):
+                continue
+            for ref_index, source_ref in enumerate(source_refs):
+                if not isinstance(source_ref, dict):
+                    violations.append(
+                        Violation(
+                            rule_id=rule_id,
+                            path=relative_path,
+                            line=None,
+                            message=f"rule '{rule_name}' has an invalid source ref entry at position {ref_index + 1}",
+                        )
+                    )
+                    continue
+                path_value = str(source_ref.get("path") or "").strip()
+                if not path_value:
+                    violations.append(
+                        Violation(
+                            rule_id=rule_id,
+                            path=relative_path,
+                            line=None,
+                            message=f"rule '{rule_name}' has an empty source ref entry at position {ref_index + 1}",
+                        )
+                    )
+                    continue
+                target_path = Path(path_value).expanduser()
+                if not target_path.is_absolute():
+                    target_path = (repo_root / target_path).resolve()
+                else:
+                    target_path = target_path.resolve()
+                try:
+                    target_path.relative_to(repo_root)
+                except ValueError:
+                    violations.append(
+                        Violation(
+                            rule_id=rule_id,
+                            path=relative_path,
+                            line=None,
+                            message=f"rule '{rule_name}' points to a source ref outside the repository: {path_value}",
+                        )
+                    )
+                    continue
+                if not target_path.exists() or not target_path.is_file():
+                    violations.append(
+                        Violation(
+                            rule_id=rule_id,
+                            path=relative_path,
+                            line=None,
+                            message=f"rule '{rule_name}' points to a missing file: {path_value}",
+                        )
+                    )
+                    continue
+                try:
+                    target_path.read_text(encoding="utf-8")
+                except (UnicodeDecodeError, OSError):
+                    violations.append(
+                        Violation(
+                            rule_id=rule_id,
+                            path=relative_path,
+                            line=None,
+                            message=f"rule '{rule_name}' points to an unreadable file: {path_value}",
+                        )
+                    )
+        return violations
+
+    def _apply_fully_defined_rules(
+        self,
+        rule: dict[str, Any],
+        relative_path: str,
+        content: str | None,
+        rule_id: str,
+    ) -> list[Violation]:
+        del rule
+        if content is None:
+            return []
+        try:
+            payload = json.loads(content)
+        except json.JSONDecodeError:
+            return []
+        if not isinstance(payload, dict):
+            return []
+        rules = payload.get("rules")
+        if not isinstance(rules, list):
+            return []
+        violations: list[Violation] = []
+        for index, candidate in enumerate(rules):
+            if not isinstance(candidate, dict):
+                violations.append(
+                    Violation(
+                        rule_id=rule_id,
+                        path=relative_path,
+                        line=None,
+                        message=f"rule {index + 1} is not a valid object",
+                    )
+                )
+                continue
+            rule_name = str(candidate.get("id") or candidate.get("type") or f"rule-{index + 1}")
+            missing_fields: list[str] = []
+            for field in ("description", "what", "why"):
+                value = candidate.get(field)
+                if not isinstance(value, str) or not value.strip():
+                    missing_fields.append(field)
+            source_refs = candidate.get("source_refs")
+            if not isinstance(source_refs, list) or not source_refs:
+                missing_fields.append("source_refs")
+            else:
+                valid_refs = []
+                for ref in source_refs:
+                    if isinstance(ref, dict) and isinstance(ref.get("path"), str) and str(ref.get("path", "")).strip():
+                        valid_refs.append(ref)
+                if len(valid_refs) != len(source_refs):
+                    missing_fields.append("source_refs")
+            if missing_fields:
+                violations.append(
+                    Violation(
+                        rule_id=rule_id,
+                        path=relative_path,
+                        line=None,
+                        message=f"rule '{rule_name}' is missing required definition fields: {', '.join(missing_fields)}",
+                    )
+                )
+        return violations
 
     def _apply_placeholder_comments(
         self,
@@ -271,6 +538,33 @@ class RuleEngine:
             ]
         return []
 
+    def _apply_button_actions(
+        self,
+        rule: dict[str, Any],
+        relative_path: str,
+        content: str | None,
+        rule_id: str,
+    ) -> list[Violation]:
+        del rule
+        if content is None or not self._should_scan_ui_markup(relative_path):
+            return []
+        violations: list[Violation] = []
+        for match in re.finditer(r"<button\b([^>]*)>", content, re.IGNORECASE):
+            attributes = match.group(1)
+            if re.search(r"\bdata-action\s*=", attributes, re.IGNORECASE):
+                continue
+            if re.search(r"\bonclick\s*=", attributes, re.IGNORECASE):
+                continue
+            violations.append(
+                Violation(
+                    rule_id=rule_id,
+                    path=relative_path,
+                    line=self._line_number_for_offset(content, match.start()),
+                    message="button is missing an explicit action hook",
+                )
+            )
+        return violations
+
     def _apply_button_types(
         self,
         rule: dict[str, Any],
@@ -279,7 +573,7 @@ class RuleEngine:
         rule_id: str,
     ) -> list[Violation]:
         del rule
-        if content is None:
+        if content is None or not self._should_scan_ui_markup(relative_path):
             return []
         violations: list[Violation] = []
         for match in re.finditer(r"<button\b([^>]*)>", content, re.IGNORECASE):
@@ -315,7 +609,7 @@ class RuleEngine:
         rule_id: str,
     ) -> list[Violation]:
         del rule
-        if content is None:
+        if content is None or not self._should_scan_ui_markup(relative_path):
             return []
         violations: list[Violation] = []
         controls = re.finditer(r"<(input|textarea|select)\b([^>]*)>", content, re.IGNORECASE)
@@ -341,6 +635,46 @@ class RuleEngine:
                 )
             )
         return violations
+
+    def _apply_asset_links(
+        self,
+        rule: dict[str, Any],
+        relative_path: str,
+        content: str | None,
+        rule_id: str,
+        repo_context: dict[str, Any] | None = None,
+    ) -> list[Violation]:
+        del rule
+        if content is None or not relative_path.endswith((".html", ".htm")):
+            return []
+        actions = re.findall(r"\bdata-action\s*=\s*['\"]([^'\"]+)['\"]", content, re.IGNORECASE)
+        if not actions:
+            return []
+        files = repo_context.get("files", {}) if repo_context else {}
+        script_content = "\n".join(
+            script
+            for path, script in files.items()
+            if isinstance(script, str)
+            and path.endswith((".js", ".jsx", ".ts", ".tsx", ".vue", ".svelte"))
+        )
+        if not script_content:
+            return []
+        violations: list[Violation] = []
+        for action_name in sorted(set(actions)):
+            if not re.search(rf"['\"]{re.escape(action_name)}['\"]", script_content, re.IGNORECASE):
+                violations.append(
+                    Violation(
+                        rule_id=rule_id,
+                        path=relative_path,
+                        line=None,
+                        message=f"front-end action '{action_name}' is not linked from client-side script",
+                    )
+                )
+        return violations
+
+    def _should_scan_ui_markup(self, relative_path: str) -> bool:
+        suffix = Path(relative_path).suffix.lower()
+        return suffix in {".html", ".htm", ".js", ".jsx", ".ts", ".tsx", ".vue", ".svelte"}
 
     def _line_number_for_offset(self, content: str, offset: int) -> int:
         return content.count("\n", 0, offset) + 1
