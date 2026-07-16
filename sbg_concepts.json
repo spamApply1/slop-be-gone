@@ -1,0 +1,73 @@
+{
+  "concepts": [
+    {
+      "id": "agent-placeholder",
+      "title": "Agent placeholder",
+      "category": "placeholder",
+      "description": "Freeze boilerplate placeholder language before it slips into the repo.",
+      "rule_kind": "placeholder-comments",
+      "pattern_name": "agent-placeholder",
+      "pattern_text": "placeholder",
+      "pattern_type": "plain_text",
+      "examples": ["placeholder", "put your code here", "replace me"]
+    },
+    {
+      "id": "copy-paste-sample",
+      "title": "Sample content",
+      "category": "placeholder",
+      "description": "Catch copy-pasted sample content that should be replaced with real implementation.",
+      "rule_kind": "placeholder-comments",
+      "pattern_name": "copy-paste-sample",
+      "pattern_text": "sample content",
+      "pattern_type": "plain_text",
+      "examples": ["sample content", "sample output"]
+    },
+    {
+      "id": "marker-signal",
+      "title": "Marker spam",
+      "category": "maintenance",
+      "description": "Freeze marker-heavy comments that turn into slop debt when they accumulate in files.",
+      "rule_kind": "marker-spam",
+      "pattern_name": "marker-signal",
+      "pattern_text": "TODO",
+      "pattern_type": "plain_text",
+      "threshold": 3,
+      "examples": ["TODO", "FIXME", "XXX"]
+    },
+    {
+      "id": "line-bloat",
+      "title": "Long lines",
+      "category": "readability",
+      "description": "Freeze the readability rule that keeps long lines from becoming hard-to-review code.",
+      "rule_kind": "long-lines",
+      "pattern_name": "line-bloat",
+      "pattern_text": "",
+      "pattern_type": "plain_text",
+      "max_length": 120,
+      "examples": ["A long one-liner that should be wrapped or refactored."]
+    },
+    {
+      "id": "oversized-file",
+      "title": "Oversized file",
+      "category": "structure",
+      "description": "Freeze the size guardrail that prevents giant files from becoming unreviewable.",
+      "rule_kind": "file-size",
+      "pattern_name": "oversized-file",
+      "pattern_text": "",
+      "pattern_type": "plain_text",
+      "max_bytes": 1048576,
+      "examples": ["A generated or monolithic file that should be split."]
+    },
+    {
+      "id": "empty-shell",
+      "title": "Empty file",
+      "category": "structure",
+      "description": "Freeze the rule that rejects empty placeholder files from making it into the tree.",
+      "rule_kind": "empty-files",
+      "pattern_name": "empty-shell",
+      "pattern_text": "",
+      "pattern_type": "plain_text",
+      "examples": ["An empty stub file that needs content."]
+    }
+  ]
+}

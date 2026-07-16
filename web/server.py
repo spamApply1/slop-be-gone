@@ -36,7 +36,7 @@ def resolve_default_repo_root() -> Path:
 
 
 from sbg.engine import RuleEngine
-from sbg.manifest import resolve_manifest_path, write_manifest
+from sbg.manifest import load_concepts, resolve_manifest_path, write_manifest
 
 
 class DashboardHandler(BaseHTTPRequestHandler):
@@ -57,6 +57,15 @@ class DashboardHandler(BaseHTTPRequestHandler):
         path = parsed.path
         if path == "/api/manifest":
             self._serve_manifest(parsed.query)
+            return
+        if path == "/api/manifest-save":
+            self._serve_manifest_save()
+            return
+        if path == "/api/concepts":
+            self._serve_concepts()
+            return
+        if path == "/api/rule-suggest":
+            self._serve_rule_suggest()
             return
         if path == "/api/scan":
             self._scan_repository()
@@ -93,8 +102,97 @@ class DashboardHandler(BaseHTTPRequestHandler):
             "manifest_path": str(manifest_path),
             "manifest": manifest_data,
             "default_repo_root": str(resolve_default_repo_root()),
+            "concepts": load_concepts(),
         }
         self._send_json(payload)
+
+    def _serve_concepts(self) -> None:
+        payload = {
+            "concepts": load_concepts(),
+            "default_repo_root": str(resolve_default_repo_root()),
+        }
+        self._send_json(payload)
+
+    def _serve_manifest_save(self) -> None:
+        payload = self._read_json_payload()
+        repo_root = self._resolve_repo_root(payload.get("repo_root"))
+        manifest_path = self._resolve_manifest_path(payload.get("manifest_path"), repo_root=repo_root)
+        manifest_payload = payload.get("manifest")
+        if isinstance(manifest_payload, str):
+            try:
+                manifest_payload = json.loads(manifest_payload)
+            except json.JSONDecodeError as exc:
+                self._send_json({"error": f"invalid manifest JSON: {exc.msg}"})
+                return
+        if not isinstance(manifest_payload, dict):
+            self._send_json({"error": "manifest payload must be an object"})
+            return
+        manifest_path = write_manifest(manifest_path, manifest_payload, repo_root=repo_root)
+        self._send_json({
+            "manifest_path": str(manifest_path),
+            "manifest": manifest_payload,
+        })
+
+    def _serve_rule_suggest(self) -> None:
+        payload = self._read_json_payload()
+        prompt = str(payload.get("prompt") or "").strip()
+        if not prompt:
+            self._send_json({"error": "prompt is required"})
+            return
+        prompt_lower = prompt.lower()
+        if any(token in prompt_lower for token in ("todo", "fixme", "marker", "note")):
+            rule = {
+                "id": "suggested-marker-spam",
+                "type": "marker-spam",
+                "enabled": True,
+                "pattern": "TODO",
+                "threshold": 3,
+                "match_mode": "plain_text",
+                "description": f"Suggested from prompt: {prompt}",
+            }
+        elif any(token in prompt_lower for token in ("placeholder", "boilerplate", "sample", "lorem")):
+            rule = {
+                "id": "suggested-placeholder",
+                "type": "placeholder-comments",
+                "enabled": True,
+                "pattern": "placeholder",
+                "match_mode": "plain_text",
+                "description": f"Suggested from prompt: {prompt}",
+            }
+        elif any(token in prompt_lower for token in ("line length", "long line", "wrap", "readability")):
+            rule = {
+                "id": "suggested-long-lines",
+                "type": "long-lines",
+                "enabled": True,
+                "max_length": 120,
+                "match_mode": "plain_text",
+                "description": f"Suggested from prompt: {prompt}",
+            }
+        elif any(token in prompt_lower for token in ("empty file", "blank file", "stub")):
+            rule = {
+                "id": "suggested-empty-files",
+                "type": "empty-files",
+                "enabled": True,
+                "description": f"Suggested from prompt: {prompt}",
+            }
+        elif any(token in prompt_lower for token in ("large file", "oversized", "big file")):
+            rule = {
+                "id": "suggested-file-size",
+                "type": "file-size",
+                "enabled": True,
+                "max_bytes": 1048576,
+                "description": f"Suggested from prompt: {prompt}",
+            }
+        else:
+            rule = {
+                "id": "suggested-placeholder",
+                "type": "placeholder-comments",
+                "enabled": True,
+                "pattern": "placeholder",
+                "match_mode": "plain_text",
+                "description": f"Suggested from prompt: {prompt}",
+            }
+        self._send_json({"prompt": prompt, "rule": rule})
 
     def _scan_repository(self) -> None:
         payload = self._read_json_payload()
@@ -222,23 +320,27 @@ class DashboardHandler(BaseHTTPRequestHandler):
         if not pattern_name:
             raise ValueError("pattern_name is required")
         pattern_text = str(payload.get("pattern_text") or "").strip()
-        if not pattern_text:
-            raise ValueError("pattern_text is required")
         rule_kind = str(payload.get("rule_kind") or "placeholder-comments")
         pattern_type = str(payload.get("pattern_type") or payload.get("match_mode") or "plain_text")
         rule: dict[str, Any] = {
             "id": pattern_name,
             "type": rule_kind,
             "enabled": True,
-            "pattern": pattern_text,
             "match_mode": pattern_type,
         }
+        if pattern_text:
+            rule["pattern"] = pattern_text
         if rule_kind == "marker-spam":
-            rule["threshold"] = 1
+            rule["threshold"] = int(payload.get("threshold") or 1)
         if rule_kind == "long-lines":
             rule["max_length"] = int(payload.get("max_length") or 120)
+        if rule_kind == "file-size":
+            rule["max_bytes"] = int(payload.get("max_bytes") or 1024 * 1024)
         if rule_kind in {"placeholder-comments", "marker-spam"}:
-            rule["patterns"] = [pattern_text]
+            if pattern_text:
+                rule["patterns"] = [pattern_text]
+        if payload.get("description"):
+            rule["description"] = str(payload.get("description"))
         return rule
 
     def _load_manifest(self, path: Path) -> dict[str, Any]:

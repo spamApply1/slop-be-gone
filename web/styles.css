@@ -87,7 +87,9 @@ label {
   color: var(--muted);
 }
 
-input[type="text"] {
+input[type="text"],
+input[type="number"],
+textarea {
   width: 100%;
   padding: 0.85rem 1rem;
   border-radius: 14px;
@@ -95,9 +97,12 @@ input[type="text"] {
   background: rgba(255, 255, 255, 0.05);
   color: var(--text);
   font: inherit;
+  resize: vertical;
 }
 
-input[type="text"]:focus {
+input[type="text"]:focus,
+input[type="number"]:focus,
+textarea:focus {
   outline: 2px solid rgba(124, 156, 255, 0.35);
   border-color: var(--accent);
 }
@@ -228,7 +233,9 @@ button.secondary {
   font-size: 0.92rem;
 }
 
-.summary-list {
+.summary-list,
+.commandments-list,
+.concepts-list {
   display: grid;
   gap: 0.7rem;
 }
@@ -254,6 +261,59 @@ button.secondary {
   color: var(--muted);
   line-height: 1.6;
   font-size: 0.94rem;
+}
+
+.manifest-editor {
+  min-height: 240px;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 0.94rem;
+  line-height: 1.5;
+}
+
+.commandment-card,
+.concept-card {
+  display: grid;
+  gap: 0.6rem;
+  padding: 0.95rem 1rem;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.commandment-card header,
+.concept-card header {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.commandment-card .rule-id,
+.concept-card h3 {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.commandment-card p,
+.concept-card p {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.commandment-card .meta,
+.concept-card .meta {
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.concept-actions {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.concept-actions button {
+  padding: 0.6rem 0.9rem;
 }
 
 .violations-list {

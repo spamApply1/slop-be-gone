@@ -44,6 +44,19 @@
           </div>
         </form>
 
+        <div class="pattern-form ai-form">
+          <label for="rule-prompt">AI-assisted rule prompt</label>
+          <textarea
+            id="rule-prompt"
+            name="rule-prompt"
+            rows="3"
+            placeholder="Describe the slop pattern you want to freeze."
+          ></textarea>
+          <div class="button-row">
+            <button type="button" id="suggest-rule" class="secondary">Suggest rule</button>
+          </div>
+        </div>
+
         <div class="pattern-form">
           <label for="pattern-name">Pattern name</label>
           <input id="pattern-name" name="pattern-name" type="text" placeholder="e.g. custom-placeholder">
@@ -58,6 +71,8 @@
                 <option value="placeholder-comments">placeholder-comments</option>
                 <option value="marker-spam">marker-spam</option>
                 <option value="long-lines">long-lines</option>
+                <option value="empty-files">empty-files</option>
+                <option value="file-size">file-size</option>
               </select>
             </label>
             <label class="select-field">
@@ -66,6 +81,29 @@
                 <option value="plain_text">Plain text</option>
                 <option value="regex">Regex</option>
               </select>
+            </label>
+          </div>
+
+          <label for="rule-description">Rule description</label>
+          <textarea
+            id="rule-description"
+            name="rule-description"
+            rows="3"
+            placeholder="Describe what this commandment protects against"
+          ></textarea>
+
+          <div class="pattern-meta-row">
+            <label class="select-field">
+              <span>Threshold</span>
+              <input id="threshold-input" name="threshold" type="number" min="1" value="3">
+            </label>
+            <label class="select-field">
+              <span>Max length</span>
+              <input id="max-length-input" name="max-length" type="number" min="1" value="120">
+            </label>
+            <label class="select-field">
+              <span>Max bytes</span>
+              <input id="max-bytes-input" name="max-bytes" type="number" min="1" value="1048576">
             </label>
           </div>
 
@@ -99,10 +137,23 @@
 
         <section id="manifest-panel" class="panel hidden">
           <div class="panel-header">
-            <h2>Current manifest</h2>
+            <h2>Hygiene commandments</h2>
+            <span id="commandments-count" class="count-pill">0 rules</span>
           </div>
-          <pre id="manifest-output" class="code-block">{}</pre>
+          <div id="commandments-list" class="commandments-list"></div>
+          <label for="manifest-editor">Manifest JSON</label>
+          <textarea id="manifest-editor" class="manifest-editor" spellcheck="false"></textarea>
+          <div class="button-row">
+            <button type="button" id="save-manifest" class="secondary">Save manifest</button>
+          </div>
         </section>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Concept library</h2>
+        </div>
+        <div id="concepts-list" class="concepts-list"></div>
       </section>
 
       <section id="drilldown-panel" class="panel drilldown-panel">

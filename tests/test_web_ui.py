@@ -61,6 +61,54 @@ class WebUITests(unittest.TestCase):
         self.assertIn("rules", payload["manifest"])
         self.assertEqual(payload["default_repo_root"], str(Path.cwd().resolve()))
 
+    def test_concepts_endpoint_returns_library(self) -> None:
+        status, body = self._request("/api/concepts")
+        self.assertEqual(status, 200)
+        response = json.loads(body)
+        self.assertIn("concepts", response)
+        self.assertTrue(response["concepts"])
+        self.assertIn("id", response["concepts"][0])
+
+    def test_manifest_save_endpoint_writes_json(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manifest_path = Path(temp_dir) / "custom_manifest.json"
+            status, body = self._request(
+                "/api/manifest-save",
+                method="POST",
+                payload={
+                    "repo_root": str(ROOT),
+                    "manifest_path": str(manifest_path),
+                    "manifest": {
+                        "rules": [
+                            {
+                                "id": "custom-commandment",
+                                "type": "placeholder-comments",
+                                "enabled": True,
+                                "patterns": ["placeholder"],
+                            }
+                        ]
+                    },
+                },
+            )
+            self.assertEqual(status, 200)
+            response = json.loads(body)
+            self.assertEqual(response["manifest_path"], str(manifest_path))
+            self.assertTrue(manifest_path.exists())
+            saved_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            self.assertEqual(saved_manifest["rules"][0]["id"], "custom-commandment")
+
+    def test_rule_suggestion_endpoint_suggests_a_rule(self) -> None:
+        status, body = self._request(
+            "/api/rule-suggest",
+            method="POST",
+            payload={"prompt": "freeze any leftover TODO markers in code comments"},
+        )
+        self.assertEqual(status, 200)
+        response = json.loads(body)
+        self.assertIn("rule", response)
+        self.assertEqual(response["rule"]["type"], "marker-spam")
+        self.assertEqual(response["rule"]["pattern"], "TODO")
+
     def test_scan_endpoint_uses_rule_engine(self) -> None:
         fixture_repo = ROOT / "tests" / "fixtures" / "fixture_repo"
         status, body = self._request(

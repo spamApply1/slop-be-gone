@@ -6,7 +6,10 @@ const showManifestCheckbox = document.getElementById("show-manifest");
 const summaryPanel = document.getElementById("summary-panel");
 const manifestPanel = document.getElementById("manifest-panel");
 const summaryList = document.getElementById("summary-list");
-const manifestOutput = document.getElementById("manifest-output");
+const commandmentsList = document.getElementById("commandments-list");
+const commandmentsCount = document.getElementById("commandments-count");
+const manifestEditor = document.getElementById("manifest-editor");
+const conceptsList = document.getElementById("concepts-list");
 const violationsList = document.getElementById("violations-list");
 const violationsCount = document.getElementById("violations-count");
 const status = document.getElementById("status");
@@ -15,16 +18,24 @@ const drilldownPanel = document.getElementById("drilldown-panel");
 const drilldownContent = document.getElementById("drilldown-content");
 const previewPatternButton = document.getElementById("preview-pattern");
 const savePatternButton = document.getElementById("save-pattern");
+const saveManifestButton = document.getElementById("save-manifest");
 const patternNameInput = document.getElementById("pattern-name");
 const patternTextInput = document.getElementById("pattern-text");
 const patternKindSelect = document.getElementById("pattern-kind");
 const patternTypeSelect = document.getElementById("pattern-type");
+const ruleDescriptionInput = document.getElementById("rule-description");
+const thresholdInput = document.getElementById("threshold-input");
+const maxLengthInput = document.getElementById("max-length-input");
+const maxBytesInput = document.getElementById("max-bytes-input");
 const outputManifestInput = document.getElementById("output-manifest");
+const rulePromptInput = document.getElementById("rule-prompt");
+const suggestRuleButton = document.getElementById("suggest-rule");
 const patternPreviewList = document.getElementById("pattern-preview-list");
 const patternPreviewSummary = document.getElementById("pattern-preview-summary");
 
 let currentManifest = null;
 let currentViolations = [];
+let currentConcepts = [];
 
 function resolveApiUrl(path) {
   if (window.location.protocol === "http:" || window.location.protocol === "https:") {
@@ -78,14 +89,154 @@ async function loadManifest() {
   try {
     const payload = await requestJson("/api/manifest");
     currentManifest = payload;
-    manifestOutput.textContent = JSON.stringify(payload.manifest || {}, null, 2);
+    currentConcepts = payload.concepts || [];
+    renderManifestView(payload);
     if (payload.default_repo_root) {
       repoPathInput.value = payload.default_repo_root;
+    }
+    if (payload.manifest_path) {
+      manifestPathInput.value = payload.manifest_path;
+      outputManifestInput.value = payload.manifest_path;
     }
     setStatus("Manifest loaded. Ready to scan.");
   } catch (error) {
     setStatus(`Unable to load manifest: ${error.message}`, "error");
   }
+}
+
+function renderManifestView(payload) {
+  const manifest = payload && payload.manifest ? payload.manifest : {};
+  const rules = Array.isArray(manifest.rules) ? manifest.rules : [];
+  currentManifest = payload || {};
+  renderCommandments(rules);
+  manifestEditor.value = JSON.stringify(manifest || {}, null, 2);
+  renderConcepts(currentConcepts);
+}
+
+function renderCommandments(rules) {
+  commandmentsList.innerHTML = "";
+  commandmentsCount.textContent = `${rules.length} rule${rules.length === 1 ? "" : "s"}`;
+  if (!rules.length) {
+    commandmentsList.innerHTML = '<div class="empty-state">No commandments have been frozen yet.</div>';
+    return;
+  }
+
+  const cards = rules.map((rule) => {
+    const ruleId = escapeHtml(rule.id || rule.type || "rule");
+    const description = escapeHtml(rule.description || `Rule type ${rule.type || "custom"}`);
+    const status = rule.enabled === false ? "disabled" : "enabled";
+    const detail = rule.pattern
+      ? `pattern: ${escapeHtml(rule.pattern)}`
+      : rule.patterns
+        ? `patterns: ${escapeHtml(rule.patterns.join(", "))}`
+        : rule.max_length
+          ? `max_length: ${escapeHtml(rule.max_length)}`
+          : rule.max_bytes
+            ? `max_bytes: ${escapeHtml(rule.max_bytes)}`
+            : "custom rule";
+    return `
+      <div class="commandment-card">
+        <header>
+          <span class="rule-id">${ruleId}</span>
+          <span class="meta">${escapeHtml(status)}</span>
+        </header>
+        <p>${description}</p>
+        <div class="meta">${detail}</div>
+      </div>
+    `;
+  });
+  commandmentsList.innerHTML = cards.join("");
+}
+
+function renderConcepts(concepts) {
+  conceptsList.innerHTML = "";
+  if (!concepts.length) {
+    conceptsList.innerHTML = '<div class="empty-state">No concept library entries are available yet.</div>';
+    return;
+  }
+
+  for (const concept of concepts) {
+    const card = document.createElement("article");
+    card.className = "concept-card";
+    card.innerHTML = `
+      <header>
+        <h3>${escapeHtml(concept.title || concept.id || "Concept")}</h3>
+        <span class="meta">${escapeHtml(concept.category || concept.rule_kind || "concept")}</span>
+      </header>
+      <p>${escapeHtml(concept.description || "")}</p>
+      <div class="meta">${escapeHtml(concept.rule_kind || "custom")}</div>
+      <div class="concept-actions">
+        <button type="button" class="secondary concept-load">Load</button>
+        <button type="button" class="concept-freeze">Freeze</button>
+      </div>
+    `;
+
+    const loadButton = card.querySelector(".concept-load");
+    loadButton.addEventListener("click", () => {
+      setPatternFormFromConcept(concept);
+      setStatus(`Loaded concept ${concept.id || concept.title}.`, "success");
+    });
+
+    const freezeButton = card.querySelector(".concept-freeze");
+    freezeButton.addEventListener("click", () => {
+      setPatternFormFromConcept(concept);
+      void savePattern(concept);
+    });
+
+    conceptsList.appendChild(card);
+  }
+}
+
+function setPatternFormFromConcept(concept) {
+  patternNameInput.value = concept.pattern_name || concept.id || "";
+  patternTextInput.value = concept.pattern_text || "";
+  patternKindSelect.value = concept.rule_kind || "placeholder-comments";
+  patternTypeSelect.value = concept.pattern_type || "plain_text";
+  ruleDescriptionInput.value = concept.description || "";
+  thresholdInput.value = concept.threshold || "3";
+  maxLengthInput.value = concept.max_length || "120";
+  maxBytesInput.value = concept.max_bytes || "1048576";
+}
+
+function buildPatternPayload(overrides = {}) {
+  const repoRoot = repoPathInput.value.trim() || ".";
+  const manifestPath = manifestPathInput.value.trim();
+  const patternName = patternNameInput.value.trim();
+  const patternText = patternTextInput.value.trim();
+  const ruleKind = patternKindSelect.value;
+  const patternType = patternTypeSelect.value;
+  const description = ruleDescriptionInput.value.trim();
+  const threshold = thresholdInput.value.trim();
+  const maxLength = maxLengthInput.value.trim();
+  const maxBytes = maxBytesInput.value.trim();
+  const outputManifestPath = outputManifestInput.value.trim();
+
+  return {
+    repoRoot,
+    manifestPath,
+    patternName,
+    patternText,
+    ruleKind,
+    patternType,
+    description,
+    threshold,
+    maxLength,
+    maxBytes,
+    outputManifestPath,
+    ...overrides,
+  };
+}
+
+function validatePatternPayload(payload) {
+  if (!payload.patternName) {
+    return "Provide a pattern name before previewing or saving.";
+  }
+  if (payload.ruleKind === "placeholder-comments" || payload.ruleKind === "marker-spam") {
+    if (!payload.patternText) {
+      return "Provide pattern text for this rule kind.";
+    }
+  }
+  return null;
 }
 
 function renderSummary(summary) {
@@ -212,36 +363,103 @@ showSummaryCheckbox.addEventListener("change", togglePanels);
 showManifestCheckbox.addEventListener("change", togglePanels);
 refreshManifestButton.addEventListener("click", loadManifest);
 
-previewPatternButton.addEventListener("click", async () => {
-  const repoRoot = repoPathInput.value.trim() || ".";
-  const manifestPath = manifestPathInput.value.trim();
-  const patternName = patternNameInput.value.trim();
-  const patternText = patternTextInput.value.trim();
-  const ruleKind = patternKindSelect.value;
-  const patternType = patternTypeSelect.value;
-  if (!patternName || !patternText) {
-    setStatus("Provide a pattern name and pattern text before previewing.", "error");
+suggestRuleButton.addEventListener("click", async () => {
+  const prompt = rulePromptInput.value.trim();
+  if (!prompt) {
+    setStatus("Describe the slop pattern you want to freeze before suggesting a rule.", "error");
     return;
   }
 
-  setStatus("Previewing pattern…");
+  setStatus("Suggesting rule…");
   try {
-    const payload = await requestJson("/api/pattern-preview", {
+    const payload = await requestJson("/api/rule-suggest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt }),
+    });
+    const rule = payload.rule || {};
+    patternNameInput.value = rule.id || "";
+    patternTextInput.value = rule.pattern || "";
+    patternKindSelect.value = rule.type || "placeholder-comments";
+    patternTypeSelect.value = rule.match_mode || "plain_text";
+    ruleDescriptionInput.value = rule.description || "";
+    thresholdInput.value = rule.threshold || "3";
+    maxLengthInput.value = rule.max_length || "120";
+    maxBytesInput.value = rule.max_bytes || "1048576";
+    setStatus("Rule suggestion ready. Review and save it.", "success");
+  } catch (error) {
+    setStatus(`Unable to suggest a rule: ${error.message}`, "error");
+  }
+});
+
+saveManifestButton.addEventListener("click", async () => {
+  const repoRoot = repoPathInput.value.trim() || ".";
+  const manifestPath = manifestPathInput.value.trim() || (currentManifest && currentManifest.manifest_path) || null;
+  let manifestPayload = null;
+  try {
+    manifestPayload = JSON.parse(manifestEditor.value);
+  } catch (error) {
+    setStatus(`Manifest JSON is invalid: ${error.message}`, "error");
+    return;
+  }
+
+  setStatus("Saving manifest…");
+  try {
+    const response = await requestJson("/api/manifest-save", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         repo_root: repoRoot,
         manifest_path: manifestPath || null,
-        pattern_name: patternName,
-        pattern_text: patternText,
-        rule_kind: ruleKind,
-        pattern_type: patternType,
+        manifest: manifestPayload,
       }),
     });
-    renderPatternPreview(payload);
+    currentManifest = {
+      manifest_path: response.manifest_path,
+      manifest: response.manifest || { rules: [] },
+      default_repo_root: repoRoot,
+    };
+    renderManifestView(currentManifest);
+    if (response.manifest_path) {
+      manifestPathInput.value = response.manifest_path;
+      outputManifestInput.value = response.manifest_path;
+    }
+    setStatus(`Manifest saved to ${response.manifest_path}.`, "success");
+  } catch (error) {
+    setStatus(`Unable to save manifest: ${error.message}`, "error");
+  }
+});
+
+async function previewPattern() {
+  const payload = buildPatternPayload();
+  const validationError = validatePatternPayload(payload);
+  if (validationError) {
+    setStatus(validationError, "error");
+    return;
+  }
+
+  setStatus("Previewing pattern…");
+  try {
+    const previewPayload = await requestJson("/api/pattern-preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        repo_root: payload.repoRoot,
+        manifest_path: payload.manifestPath || null,
+        pattern_name: payload.patternName,
+        pattern_text: payload.patternText,
+        rule_kind: payload.ruleKind,
+        pattern_type: payload.patternType,
+        threshold: payload.threshold || null,
+        max_length: payload.maxLength || null,
+        max_bytes: payload.maxBytes || null,
+        description: payload.description || null,
+      }),
+    });
+    renderPatternPreview(previewPayload);
     const previewStatus = (
-      `Preview ready. ${payload.preview_violation_count} violation${payload.preview_violation_count === 1 ? "" : "s"}` +
-      " would be emitted."
+      `Preview ready. ${previewPayload.preview_violation_count} violation` +
+      `${previewPayload.preview_violation_count === 1 ? "" : "s"} would be emitted.`
     );
     setStatus(previewStatus, "success");
   } catch (error) {
@@ -249,53 +467,60 @@ previewPatternButton.addEventListener("click", async () => {
     patternPreviewList.innerHTML = '<div class="empty-state">Preview failed.</div>';
     setStatus(`Preview failed: ${error.message}`, "error");
   }
-});
+}
 
-savePatternButton.addEventListener("click", async () => {
-  const repoRoot = repoPathInput.value.trim() || ".";
-  const manifestPath = manifestPathInput.value.trim();
-  const patternName = patternNameInput.value.trim();
-  const patternText = patternTextInput.value.trim();
-  const ruleKind = patternKindSelect.value;
-  const patternType = patternTypeSelect.value;
-  const outputManifestPath = outputManifestInput.value.trim();
-  if (!patternName || !patternText) {
-    setStatus("Provide a pattern name and pattern text before saving.", "error");
+async function savePattern(concept = null) {
+  const payload = buildPatternPayload(concept || {});
+  const validationError = validatePatternPayload(payload);
+  if (validationError) {
+    setStatus(validationError, "error");
     return;
   }
 
   setStatus("Saving pattern…");
   try {
-    const payload = await requestJson("/api/pattern-save", {
+    const response = await requestJson("/api/pattern-save", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        repo_root: repoRoot,
-        manifest_path: manifestPath || null,
-        output_manifest_path: outputManifestPath || null,
-        pattern_name: patternName,
-        pattern_text: patternText,
-        rule_kind: ruleKind,
-        pattern_type: patternType,
+        repo_root: payload.repoRoot,
+        manifest_path: payload.manifestPath || null,
+        output_manifest_path: payload.outputManifestPath || null,
+        pattern_name: payload.patternName,
+        pattern_text: payload.patternText,
+        rule_kind: payload.ruleKind,
+        pattern_type: payload.patternType,
+        threshold: payload.threshold || null,
+        max_length: payload.maxLength || null,
+        max_bytes: payload.maxBytes || null,
+        description: payload.description || null,
       }),
     });
     currentManifest = {
-      manifest_path: payload.manifest_path,
-      manifest: payload.manifest || { rules: [] },
-      default_repo_root: repoRoot,
+      manifest_path: response.manifest_path,
+      manifest: response.manifest || { rules: [] },
+      default_repo_root: payload.repoRoot,
     };
-    manifestOutput.textContent = JSON.stringify(payload.manifest || {}, null, 2);
-    if (payload.manifest_path) {
-      manifestPathInput.value = payload.manifest_path;
-      outputManifestInput.value = payload.manifest_path;
+    renderManifestView(currentManifest);
+    if (response.manifest_path) {
+      manifestPathInput.value = response.manifest_path;
+      outputManifestInput.value = response.manifest_path;
     }
-    renderPatternPreview(payload);
-    setStatus(`Pattern saved to ${payload.manifest_path}.`, "success");
+    renderPatternPreview(response);
+    setStatus(`Pattern saved to ${response.manifest_path}.`, "success");
   } catch (error) {
     patternPreviewSummary.textContent = "Save failed";
     patternPreviewList.innerHTML = '<div class="empty-state">Save failed.</div>';
     setStatus(`Save failed: ${error.message}`, "error");
   }
+}
+
+previewPatternButton.addEventListener("click", () => {
+  void previewPattern();
+});
+
+savePatternButton.addEventListener("click", () => {
+  void savePattern();
 });
 
 form.addEventListener("submit", async (event) => {
@@ -317,7 +542,7 @@ form.addEventListener("submit", async (event) => {
     renderViolations(payload.violations || []);
     renderSummary(payload.summary || { total: 0, by_rule: {} });
     if (currentManifest) {
-      manifestOutput.textContent = JSON.stringify(currentManifest.manifest || {}, null, 2);
+      renderManifestView(currentManifest);
     }
     const fileLabel = payload.violation_count === 1 ? "finding" : "findings";
     const summaryMessage = `Scan complete. ${payload.violation_count} ${fileLabel} across ${payload.repo_root}.`;
