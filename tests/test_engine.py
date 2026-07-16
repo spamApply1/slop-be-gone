@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -46,6 +47,27 @@ class RuleEngineTests(unittest.TestCase):
         file_size_violations = [violation for violation in violations if violation.rule_id == "file-size"]
         self.assertTrue(file_size_violations)
         self.assertIn("other/oversized.txt", {violation.path for violation in file_size_violations})
+
+    def test_design_rules_flag_button_and_form_issues(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = Path(temp_dir)
+            (repo_root / "index.html").write_text(
+                "<form><button>Save</button><input name=\"email\" /></form>",
+                encoding="utf-8",
+            )
+            engine = RuleEngine(
+                {
+                    "rules": [
+                        {"id": "button-types", "type": "button-types", "enabled": True},
+                        {"id": "form-labels", "type": "form-labels", "enabled": True},
+                    ]
+                }
+            )
+            violations = engine.scan_repository(repo_root)
+
+            violation_ids = {violation.rule_id for violation in violations}
+            self.assertIn("button-types", violation_ids)
+            self.assertIn("form-labels", violation_ids)
 
 
 if __name__ == "__main__":

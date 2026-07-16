@@ -47,6 +47,28 @@
       "examples": ["A long one-liner that should be wrapped or refactored."]
     },
     {
+      "id": "button-types",
+      "title": "Explicit button types",
+      "category": "design",
+      "description": "Freeze the UI convention that every button must declare its interaction intent.",
+      "rule_kind": "button-types",
+      "pattern_name": "button-types",
+      "pattern_text": "",
+      "pattern_type": "plain_text",
+      "examples": ["<button type=\"button\">", "<button type=\"submit\">"]
+    },
+    {
+      "id": "form-labels",
+      "title": "Accessible form labels",
+      "category": "design",
+      "description": "Freeze the accessibility convention that every form control needs an explicit label.",
+      "rule_kind": "form-labels",
+      "pattern_name": "form-labels",
+      "pattern_text": "",
+      "pattern_type": "plain_text",
+      "examples": ["<label for=\"email\">Email</label>", "<input id=\"email\" aria-label=\"Email\">"]
+    },
+    {
       "id": "oversized-file",
       "title": "Oversized file",
       "category": "structure",

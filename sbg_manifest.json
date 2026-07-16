@@ -31,6 +31,16 @@
       "max_length": 120
     },
     {
+      "id": "button-types",
+      "type": "button-types",
+      "enabled": true
+    },
+    {
+      "id": "form-labels",
+      "type": "form-labels",
+      "enabled": true
+    },
+    {
       "id": "file-size",
       "type": "file-size",
       "enabled": true,

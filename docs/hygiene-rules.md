@@ -85,7 +85,47 @@ Bad pattern:
 payload = {"user_id": user_id, "role": role, "status": status, "active": active, "name": name}
 ```
 
-## 5. file-size
+## 5. button-types
+
+What it catches:
+- Buttons that omit an explicit `type` attribute or declare a non-standard type.
+
+Why it matters:
+- Explicit button types make UI interactions predictable and reduce accidental
+  submits or form resets. They are a low-friction way to keep the interface
+  consistent across generated components.
+
+Good pattern:
+```html
+<button type="button">Cancel</button>
+```
+
+Bad pattern:
+```html
+<button>Cancel</button>
+```
+
+## 6. form-labels
+
+What it catches:
+- Form controls that lack a clear label or accessible name.
+
+Why it matters:
+- Labels make forms usable for assistive tech and reduce the chance that agentic
+  edits create confusing or broken interactive surfaces.
+
+Good pattern:
+```html
+<label for="email">Email</label>
+<input id="email" name="email" />
+```
+
+Bad pattern:
+```html
+<input name="email" />
+```
+
+## 7. file-size
 
 What it catches:
 - Files that grow beyond the configured size threshold, which defaults to 1 MiB.

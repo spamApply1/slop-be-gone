@@ -147,6 +147,10 @@ class RuleEngine:
             return self._apply_long_lines(rule, relative_path, content, rule_id)
         if rule_type == "file-size":
             return self._apply_file_size(rule, relative_path, file_size, rule_id)
+        if rule_type == "button-types":
+            return self._apply_button_types(rule, relative_path, content, rule_id)
+        if rule_type == "form-labels":
+            return self._apply_form_labels(rule, relative_path, content, rule_id)
         return []
 
     def _apply_placeholder_comments(
@@ -266,6 +270,87 @@ class RuleEngine:
                 )
             ]
         return []
+
+    def _apply_button_types(
+        self,
+        rule: dict[str, Any],
+        relative_path: str,
+        content: str | None,
+        rule_id: str,
+    ) -> list[Violation]:
+        del rule
+        if content is None:
+            return []
+        violations: list[Violation] = []
+        for match in re.finditer(r"<button\b([^>]*)>", content, re.IGNORECASE):
+            attributes = match.group(1)
+            type_match = re.search(r"\btype\s*=\s*['\"]?([^'\"\s>]+)", attributes, re.IGNORECASE)
+            if not type_match:
+                violations.append(
+                    Violation(
+                        rule_id=rule_id,
+                        path=relative_path,
+                        line=self._line_number_for_offset(content, match.start()),
+                        message="button is missing an explicit type attribute",
+                    )
+                )
+                continue
+            explicit_type = type_match.group(1).lower()
+            if explicit_type not in {"button", "submit", "reset"}:
+                violations.append(
+                    Violation(
+                        rule_id=rule_id,
+                        path=relative_path,
+                        line=self._line_number_for_offset(content, match.start()),
+                        message=f"button type '{explicit_type}' is not a safe explicit type",
+                    )
+                )
+        return violations
+
+    def _apply_form_labels(
+        self,
+        rule: dict[str, Any],
+        relative_path: str,
+        content: str | None,
+        rule_id: str,
+    ) -> list[Violation]:
+        del rule
+        if content is None:
+            return []
+        violations: list[Violation] = []
+        controls = re.finditer(r"<(input|textarea|select)\b([^>]*)>", content, re.IGNORECASE)
+        for match in controls:
+            attributes = match.group(2)
+            if re.search(r"\b(?:aria-label|aria-labelledby|title)\s*=", attributes, re.IGNORECASE):
+                continue
+            if re.search(r"\btype\s*=\s*['\"]?(?:hidden|button|submit|reset)", attributes, re.IGNORECASE):
+                continue
+            control_id = self._extract_attribute(attributes, "id")
+            if control_id and re.search(
+                rf"<label\b[^>]*\bfor\s*=\s*['\"]{re.escape(control_id)}['\"]",
+                content,
+                re.IGNORECASE,
+            ):
+                continue
+            violations.append(
+                Violation(
+                    rule_id=rule_id,
+                    path=relative_path,
+                    line=self._line_number_for_offset(content, match.start()),
+                    message="form control is missing an explicit label or accessible name",
+                )
+            )
+        return violations
+
+    def _line_number_for_offset(self, content: str, offset: int) -> int:
+        return content.count("\n", 0, offset) + 1
+
+    def _extract_attribute(self, attributes: str, attribute_name: str) -> str | None:
+        pattern = rf"\b{re.escape(attribute_name)}\s*=\s*['\"]?([^'\"\s>]+)"
+        match = re.search(pattern, attributes, re.IGNORECASE)
+        if match:
+            return match.group(1)
+        return None
 
     def _collect_patterns(self, rule: dict[str, Any], fallback: list[str] | None = None) -> list[str]:
         patterns = rule.get("patterns")
