@@ -1,163 +1,159 @@
-# Slop Be Gone
+# slop-be-gone (sbg)
 
-Slop Be Gone is a local-first hygiene framework for agentic codebases. It is
-meant for anyone who wants a lightweight, repository-friendly way to keep
-AI-assisted changes from drifting into slop. It uses manifest-driven rules to
-flag common hygiene failures such as placeholder comments, TODO/FIXME/XXX
-spam, empty files, overly long lines, and oversized files.
+**Make AI slop fail at the gate before it fossilizes in your repo.**
 
-The project is inspired by the manifest-driven spirit of idud-hygiene, but it
-is intentionally opinionated for the agentic-only workflow where quality gates
-must fail loudly and early. This repository uses SBG to police itself with a
-self-hygiene manifest and a pre-commit hook loop.
+`slop-be-gone` is a local-first code hygiene framework for agentic codebases:
+repos where agents generate enough code that review becomes damage control. The
+fix is not another dashboard full of vibes. It is executable standards, a
+manifest, and a CLI that fails loudly before generated cruft becomes architecture.
 
-## What it does
-
-- Scans a repository with a default manifest in `sbg_manifest.json`
-- Prints clear violations and exits non-zero when damage is detected
-- Ships rules for placeholder comments, marker spam, empty files, long lines,
-  oversized files, UI/design integrity, unresolved merge-conflict markers,
-  committed secrets, leftover debug artifacts, trailing whitespace, and missing
-  final newlines
-- Ships AST-based Python static analysis (parses real syntax trees, not text):
-  syntax errors, bare/broad `except`, mutable default arguments, `eval`/`exec`,
-  and configurable function-length / argument-count / nesting-depth checks
-- Lets any rule be scoped to specific paths with per-rule `include`/`exclude`
-  globs, and lets you compose several checks into one idea with `composite`
-- Supports per-rule `severity` (`error` or `warning`) for gradual rollout, with
-  `sbg check --strict` to make warnings blocking
-- Validates a manifest with `sbg validate`, and refuses to scan with broken
-  policy (a `check` run fails fast if the manifest is malformed)
-- Supports staged-file checks with `sbg check --staged`
-- Can auto-fix the safe rules with `sbg check --fix` (trailing whitespace and
-  missing final newlines, preserving existing line endings)
-- Installs a pre-commit hook with `sbg install-hooks`
-- Supports one-command installer scripts for other repositories
-- Produces a human-readable report with `sbg report`
-- Supports JSON output for automation and CI
-- Ships with a lightweight local web dashboard in `web/` for scanning repositories and reviewing findings
-- Can generate repeatable script/bridge maps with `sbg script-map` so UI
-  relationships and handler wiring stay inspectable
-- Keeps the rule set easy to review, test, and extend
-
-
-## Quick start
+## ⚡ Quickstart
 
 ```bash
 python3 -m pip install -e .
-./sbg check .
+PYTHONPATH="$PWD/src" ./sbg check docs --manifest "$PWD/sbg_self_manifest.json" \
+  --json --strict
 ```
 
-To scaffold SBG into a repository that does not have it yet (writes a default
-`sbg_manifest.json` and the human-readable `docs/hygiene-rules.md` guide):
+Clean JSON is the sound of a gate doing its job:
 
-```bash
-./sbg init /path/to/target-repo
+```json
+[]
 ```
 
-For automation-friendly output:
+Scan the whole repository with the self policy:
 
 ```bash
-./sbg check . --json
+PYTHONPATH="$PWD/src" ./sbg check . --manifest ./sbg_self_manifest.json
+# No blocking violations found (warnings may still be printed).
 ```
 
-To enforce hygiene on staged changes before a commit:
+Wire it into commits:
 
 ```bash
-./sbg install-hooks
-./sbg check --staged .
+PYTHONPATH="$PWD/src" ./sbg install-hooks --manifest ./sbg_self_manifest.json .
+PYTHONPATH="$PWD/src" ./sbg check --staged . --manifest ./sbg_self_manifest.json
 ```
 
-To automatically fix the violations that support it (trailing whitespace and
-missing final newlines) before reporting the rest:
+Use the shared automation contract in CI or a harness:
 
 ```bash
+./sbg check . --manifest ./sbg_manifest.json --json --strict
+```
+
+## 🧱 What it enforces
+
+The bundled manifest is intentionally opinionated. It is still just JSON, so you
+can disable rules, scope them with `include` and `exclude`, or lower them to
+`warning` while rolling out.
+
+| Rule family | Rule IDs | What fails |
+| --- | --- | --- |
+| Text hygiene | `placeholder-comments`<br>`marker-spam`<br>`long-lines` | Scaffold leftovers and dense lines. |
+| File shape | `empty-files`<br>`file-size`<br>`trailing-whitespace`<br>`final-newline` | Empty, huge, or noisy files. |
+| UI integrity | `button-actions`<br>`button-types`<br>`form-labels`<br>`asset-links` | Unclear or unwired UI. |
+| Policy quality | `fully-defined-rules`<br>`source-loadable`<br>`dynamic-config` | Opaque or brittle policy. |
+| Repo hazards | `merge-conflict-markers`<br>`secret-scan`<br>`debug-artifacts` | Broken merges and leaks. |
+| Python AST checks | `python-syntax`<br>`python-bare-except`<br>`python-broad-except` | Parse and exception traps. |
+| Python design checks | `python-mutable-default`<br>`python-eval-exec` | State leaks and dynamic execution. |
+| Python complexity | `python-function-args`<br>`python-function-length`<br>`python-nesting-depth` | Complexity. |
+| Composition | `composite` | Multiple checks bundled into one higher-level policy idea. |
+
+## 🧠 How it works
+
+- `sbg check` resolves a manifest, validates it, scans files, prints violations,
+  and exits non-zero when blocking rules fire.
+- `--json` emits machine-readable violations for CI, agents, and scripts.
+- `--strict` treats warning-severity findings as blocking, useful once a repo is
+  ready to make the policy hard.
+- `--staged` scans only `git diff --cached --name-only`, which is what the
+  installed pre-commit hook uses.
+- `--fix` safely repairs trailing whitespace and missing final newlines before
+  reporting anything else.
+- Python checks parse real ASTs for syntax, exception, mutable-default,
+  dynamic-execution, argument-count, function-length, and nesting rules.
+- `sbg report` groups findings with suggestions. `sbg script-map` builds a JSON
+  map of scripts, UI actions, and bridge relationships for inspection tooling.
+- The optional `web/` dashboard runs locally for browsing scans and bridge
+  context. The CLI does not require a hosted service.
+
+## 🧬 Part of the be-gone ecosystem
+
+The family is a set of small, composable enforcement gates for codebases where
+AI agents generate large chunks of the tree:
+
+- [slop-be-gone](https://github.com/spamApply1/slop-be-gone) — code hygiene:
+  comments, file shape, Python traps, secrets, debug leftovers, and more.
+- [design-be-gone](https://github.com/spamApply1/design-be-gone) — design
+  standards: markup shape, heading discipline, filename case, and exports.
+- [chaos-be-gone](https://github.com/spamApply1/chaos-be-gone) — workflow
+  sanity: CI, hooks, ignore files, README presence, and workflow secret checks.
+
+Together, they are the quality backstop for local AI code factories: let agents
+move fast, then make the standards executable enough to push back.
+
+## 🧾 Manifest-driven by design
+
+A manifest is a JSON object with rules:
+
+```json
+{
+  "rules": [
+    { "id": "readability", "type": "long-lines", "max_length": 120 },
+    { "id": "python-ast", "type": "python-syntax", "enabled": true }
+  ]
+}
+```
+
+Each rule can carry `id`, `type`, `enabled`, `severity`, `include`, `exclude`,
+and rule-specific thresholds. Invalid manifests fail validation before a scan so
+broken policy does not silently pass.
+
+## 🛠 Common commands
+
+```bash
+./sbg init path/to/repo
+./sbg validate . --manifest ./sbg_manifest.json
 ./sbg check . --fix
-```
-
-To validate the active manifest without scanning files:
-
-```bash
-./sbg validate .
-```
-
-To get a grouped summary with suggestions:
-
-```bash
 ./sbg report .
-```
-
-To launch the local dashboard, run:
-
-```bash
+./sbg script-map . --output ./script-map.json
 ./scripts/start-dashboard.sh
 ```
 
-You can also run `python3 web/server.py` directly if you want to customize the host or port.
-
-To generate a repeatable script map for the current repository (or a target path), run:
+Installer scripts are included for bringing SBG to another repository:
 
 ```bash
-./sbg script-map . --output ./script-map.json
+./scripts/install-sbg-hook.sh path/to/repo
+./scripts/install-sbg-hook.sh path/to/repo path/to/manifest.json
 ```
 
-That JSON graph is used by the dashboard to surface bridge context and
-related assets when you inspect a rule, violation, or source file.
+PowerShell users can run `scripts/install-sbg-hook.ps1` with `-TargetRepo` and
+an optional `-ManifestPath`.
 
-Then open the dashboard URL shown by the server in your browser. The
-repository field starts filled with the current git repository root, so the
-dashboard defaults to the repo you launched it from.
-
-## Self-policing workflow
-
-This repository uses `sbg_self_manifest.json` as its self-hygiene policy and
-installs a pre-commit hook that runs SBG against staged changes before each
-commit. The same pattern is reusable for other repositories:
+## 🧪 Development
 
 ```bash
-python3 -m pip install -e .
-./sbg install-hooks --manifest ./sbg_self_manifest.json .
-./sbg check --staged --manifest ./sbg_self_manifest.json .
+PYTHONPATH="$PWD/src" python3 -m unittest discover -s tests -v
+PYTHONPATH="$PWD/src" ./sbg validate . --manifest ./sbg_self_manifest.json
+PYTHONPATH="$PWD/src" ./sbg check . --manifest ./sbg_self_manifest.json
 ```
 
-See [docs/self-hygiene.md](docs/self-hygiene.md) for the full hook-based
-commit loop and the intended enterprise rollout.
+Project map:
 
-## Install SBG into another repository
+- `src/sbg/engine.py` — rule engine and violation model.
+- `src/sbg/ast_analysis.py` — AST-based Python analyzers.
+- `src/sbg/manifest.py` — manifest loading and bundled policy resolution.
+- `src/sbg/cli.py` — CLI entry point.
+- `src/sbg/data/` — bundled manifest, concepts, and rule guide.
+- `web/` — local dashboard assets.
+- `tests/` — CLI, engine, AST, packaging, script-map, and web UI coverage.
 
-If you want to bring SBG to a different git repository, run one of the
-installer scripts in this checkout:
+## 🧭 Philosophy
 
-```bash
-./scripts/install-sbg-hook.sh /path/to/target-repo
-./scripts/install-sbg-hook.sh /path/to/target-repo ./path/to/manifest.json
-```
+The north star is brutally simple: define reality with standards and intent.
+Push enforcement outward until there is one canonical way for each thing to
+exist, then let humans and local agents move fast inside that rail.
 
-For PowerShell:
-
-```powershell
-pwsh -File .\scripts\install-sbg-hook.ps1 -TargetRepo C:\path\to\target-repo
-pwsh -File .\scripts\install-sbg-hook.ps1 -TargetRepo C:\path\to\target-repo -ManifestPath .\path\to\manifest.json
-```
-
-The scripts install SBG in editable mode into the current Python environment and
-then install a pre-commit hook into the target repository. The optional manifest
-path is passed through to SBG's hook installer. See
-[docs/hygiene-rules.md](docs/hygiene-rules.md) for a human-readable guide to the
-default rule set.
-
-## Project layout
-
-- `src/sbg/engine.py` contains the rule engine and violation model
-- `src/sbg/ast_analysis.py` contains the AST-based Python analyzers
-- `src/sbg/manifest.py` loads the JSON manifest
-- `src/sbg/cli.py` provides the CLI entry point
-- `src/sbg/data/` holds the bundled default manifest, concepts, and rule guide
-- `sbg_manifest.json` holds the default rules
-- `tests/` contains fixture-based and CLI tests
-
-## Development
-
-```bash
-python3 -m unittest discover -s tests -v
-```
+If that makes your inner build-system gremlin happy, ⭐ star the repo, try it on
+a codebase that an agent has been enthusiastically "helping," and compose a
+manifest that encodes your taste.
